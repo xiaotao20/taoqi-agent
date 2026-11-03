@@ -1,6 +1,6 @@
 # taoqi-agent
 
-一个使用 Java 开发的 Agent 项目。
+一个使用 Java 开发的 Agent 项目。 
 
 ## 项目简介
 
