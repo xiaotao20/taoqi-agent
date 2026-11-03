@@ -1,4 +1,4 @@
-package org.example.common.util;
+package com.taoqi.common.util;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

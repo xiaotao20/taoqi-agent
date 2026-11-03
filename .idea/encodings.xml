@@ -5,5 +5,15 @@
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/taoqi-agent-common/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/taoqi-agent-common/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration-api/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration-api/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration-server/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration-server/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration/taoqi-agent-integration-api/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration/taoqi-agent-integration-api/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration/taoqi-agent-integration-server/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-integration/taoqi-agent-integration-server/src/main/resources" charset="UTF-8" />
   </component>
 </project>

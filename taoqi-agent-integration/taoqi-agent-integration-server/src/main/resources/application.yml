@@ -1,0 +1,33 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: taoqi-agent-integration
+  mail:
+    # QQ 邮箱 SMTP 服务，SSL 端口 465
+    host: smtp.qq.com
+    port: 465
+    # 发件 QQ 邮箱地址，可通过环境变量 QQ_MAIL_USERNAME 覆盖
+    username: ${QQ_MAIL_USERNAME:1377417617@qq.com}
+    # QQ 邮箱授权码（不是登录密码），建议通过环境变量 QQ_MAIL_AUTH_CODE 覆盖
+    password: ${QQ_MAIL_AUTH_CODE:ijrdkfndwxlqfjeb}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+taoqi:
+  mail:
+    # 发件人地址默认与 SMTP 账号一致，可通过环境变量 QQ_MAIL_USERNAME 覆盖
+    from: ${QQ_MAIL_USERNAME:1377417617@qq.com}
+    personal: Taoqi Agent
+  integration:
+    # 其它服务通过 Feign 调用本服务的地址
+    base-url: http://localhost:8081
