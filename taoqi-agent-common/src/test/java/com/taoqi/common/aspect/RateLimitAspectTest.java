@@ -7,6 +7,7 @@ import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
 
 import com.taoqi.common.annotation.RateLimit;
 import com.taoqi.common.exception.RateLimitExceededException;
+import com.taoqi.common.ratelimit.InMemoryRateLimitStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,7 +22,7 @@ class RateLimitAspectTest {
 
     @Test
     void allowsCallsWithinLimit() {
-        SampleService service = proxy(new SampleService(), new RateLimitAspect());
+        SampleService service = proxy(new SampleService(), new RateLimitAspect(new InMemoryRateLimitStore()));
 
         assertThat(service.query()).isEqualTo("ok");
         assertThat(service.query()).isEqualTo("ok");
@@ -29,7 +30,7 @@ class RateLimitAspectTest {
 
     @Test
     void rejectsCallsOverLimit() {
-        SampleService service = proxy(new SampleService(), new RateLimitAspect());
+        SampleService service = proxy(new SampleService(), new RateLimitAspect(new InMemoryRateLimitStore()));
 
         service.query();
         service.query();
@@ -42,7 +43,8 @@ class RateLimitAspectTest {
     @Test
     void resetsAfterWindowExpires() {
         AtomicLong now = new AtomicLong(0);
-        SampleService service = proxy(new SampleService(), new RateLimitAspect(now::get));
+        RateLimitAspect aspect = new RateLimitAspect(new InMemoryRateLimitStore(now::get));
+        SampleService service = proxy(new SampleService(), aspect);
 
         service.query();
         service.query();
@@ -55,7 +57,7 @@ class RateLimitAspectTest {
 
     @Test
     void limitsDifferentKeysIndependently() {
-        SampleService service = proxy(new SampleService(), new RateLimitAspect());
+        SampleService service = proxy(new SampleService(), new RateLimitAspect(new InMemoryRateLimitStore()));
 
         service.query();
         service.query();

@@ -4,6 +4,7 @@ import com.taoqi.chat.facade.EmailClientFacade;
 import com.taoqi.chat.handler.GlobalExceptionHandler;
 import com.taoqi.common.aspect.RateLimitAspect;
 import com.taoqi.common.exception.RateLimitExceededException;
+import com.taoqi.common.ratelimit.InMemoryRateLimitStore;
 import com.taoqi.common.result.R;
 import com.taoqi.integration.api.dto.EmailSubmitResult;
 import org.junit.jupiter.api.Test;
@@ -64,7 +65,7 @@ class ChatControllerRateLimitTest {
 
     private static ChatController proxy(ChatController target) {
         AspectJProxyFactory factory = new AspectJProxyFactory(target);
-        factory.addAspect(new RateLimitAspect());
+        factory.addAspect(new RateLimitAspect(new InMemoryRateLimitStore()));
         return factory.getProxy();
     }
 }

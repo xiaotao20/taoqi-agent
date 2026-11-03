@@ -1,8 +1,6 @@
 package com.taoqi.common.aspect;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.function.LongSupplier;
+import java.time.Duration;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -16,12 +14,14 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.taoqi.common.annotation.RateLimit;
 import com.taoqi.common.exception.RateLimitExceededException;
+import com.taoqi.common.ratelimit.RateLimitDecision;
+import com.taoqi.common.ratelimit.RateLimitStore;
 
 /**
- * {@code @RateLimit} 的切面实现：固定时间窗口计数，超过阈值直接抛异常，不执行目标方法。
+ * {@code @RateLimit} 的切面实现：把限流判断委托给 {@code RateLimitStore}，超过阈值直接抛异常。
  *
- * <p>每个限流 key 在内存中保存“窗口重置时间 + 当前计数”，窗口到期后自动从 1 重新计数；
- * key 由方法签名（或注解上的 {@code key}）与调用方 IP 拼成，避免不同接口、不同客户端互相影响。
+ * <p>key 由方法签名（或注解上的 {@code key}）与调用方 IP 拼成，避免不同接口、不同客户端互相影响。
+ * 单机存储与 Redis 存储通过配置切换，切面本身不感知具体实现。
  *
  * @author xiaotao
  * @date 2026-11-03
@@ -29,47 +29,23 @@ import com.taoqi.common.exception.RateLimitExceededException;
 @Aspect
 public class RateLimitAspect {
 
-    /**
-     * key 数量超过该值时清理已过期的窗口，防止内存无限增长。
-     */
-    private static final int CLEANUP_THRESHOLD = 1024;
+    private final RateLimitStore rateLimitStore;
 
-    private final ConcurrentMap<String, Window> windows = new ConcurrentHashMap<>();
-
-    private final LongSupplier clock;
-
-    public RateLimitAspect() {
-        this(System::currentTimeMillis);
-    }
-
-    /**
-     * 允许注入时钟，便于测试窗口过期逻辑。
-     */
-    RateLimitAspect(LongSupplier clock) {
-        this.clock = clock;
+    public RateLimitAspect(RateLimitStore rateLimitStore) {
+        this.rateLimitStore = rateLimitStore;
     }
 
     @Around("@annotation(rateLimit)")
     public Object around(ProceedingJoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
-        long now = clock.getAsLong();
-        long windowMillis = Math.max(1, rateLimit.windowSeconds()) * 1000L;
-        int limit = Math.max(1, rateLimit.limit());
         String key = buildKey(joinPoint, rateLimit);
+        Duration window = Duration.ofSeconds(Math.max(1, rateLimit.windowSeconds()));
 
-        Window window = windows.compute(key, (k, current) -> {
-            if (current == null || now >= current.resetAt()) {
-                return new Window(now + windowMillis, 1);
-            }
-            return new Window(current.resetAt(), current.count() + 1);
-        });
-
-        if (window.count() > limit) {
-            long retryAfterSeconds = Math.max(1, (window.resetAt() - now + 999) / 1000);
+        RateLimitDecision decision = rateLimitStore.tryAcquire(key, rateLimit.limit(), window);
+        if (!decision.allowed()) {
             throw new RateLimitExceededException(
-                    "请求过于频繁，请 " + retryAfterSeconds + " 秒后重试", retryAfterSeconds);
+                    "请求过于频繁，请 " + decision.retryAfterSeconds() + " 秒后重试",
+                    decision.retryAfterSeconds());
         }
-
-        cleanupIfNecessary(now);
         return joinPoint.proceed();
     }
 
@@ -94,14 +70,5 @@ public class RateLimitAspect {
             return request.getRemoteAddr();
         }
         return "unknown";
-    }
-
-    private void cleanupIfNecessary(long now) {
-        if (windows.size() > CLEANUP_THRESHOLD) {
-            windows.entrySet().removeIf(entry -> now >= entry.getValue().resetAt());
-        }
-    }
-
-    private record Window(long resetAt, int count) {
     }
 }

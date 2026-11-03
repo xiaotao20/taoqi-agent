@@ -68,6 +68,12 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 - 实体类放在 `-api` 模块的 `entity` 包，类名以 `Entity` 结尾，用 `@TableName` 指定表名、`@TableId(type = IdType.AUTO)` 指定自增主键；`-api` 只依赖 `mybatis-plus-annotation`，不依赖整个 ORM。
 - 分页插件需要在配置类中注册 `MybatisPlusInterceptor` + `PaginationInnerInterceptor`，并引入 `mybatis-plus-jsqlparser`。
 
+### 限流
+
+- `@RateLimit` 默认走内存存储，只对单实例有效；多实例通过 `taoqi.rate-limit.store-type=redis` 切换为 Redis 共享计数，需要运行期引入 `spring-boot-starter-data-redis`。
+- Redis 实现用 Lua 原子完成自增、设置过期和读取 TTL；Redis 不可用时 fail-open 放行，避免拖垮业务。
+- 验证码等本地缓存同样是单实例语义，多实例部署时要一起换成 Redis。
+
 ### 异步任务
 
 - 耗时的外部调用（SMTP、短信等）采用异步：接口先落一条 `SENDING` 状态的记录并立即返回，业务层发布事件（如 `EmailSendEvent`），监听器用 `@Async` + `@EventListener` 在自定义 `ThreadPoolTaskExecutor` 中调用执行组件；完成后把状态更新为 `SUCCESS` / `FAILED` 并写入完成时间。

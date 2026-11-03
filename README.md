@@ -448,16 +448,44 @@ public EmailSendResult sendTestEmail(...) { ... }
 | 文件 | 作用 |
 |---|---|
 | `annotation/RateLimit` | 注解定义 |
-| `aspect/RateLimitAspect` | AOP 切面：固定时间窗口计数 |
+| `aspect/RateLimitAspect` | AOP 切面：拼 key 并委托给 `RateLimitStore` |
+| `ratelimit/RateLimitStore` | 限流计数存储接口 |
+| `ratelimit/InMemoryRateLimitStore` | 内存实现（固定窗口，单实例） |
+| `ratelimit/RedisRateLimitStore` | Redis 实现（Lua 原子计数，多实例共享） |
+| `ratelimit/RateLimitProperties` | `taoqi.rate-limit.*` 配置 |
 | `exception/RateLimitExceededException` | 超限异常，携带建议重试秒数 |
-| `autoconfigure/RateLimitAutoConfiguration` | 自动注册切面，通过 `META-INF/spring/...imports` 生效 |
+| `autoconfigure/RateLimitAutoConfiguration` | 自动注册切面与存储实现 |
 
 规则：
 
 - 限流 key = 方法签名（或注解 `key`）+ 调用方 IP，同一接口不同客户端互不影响；有 `X-Forwarded-For` 时优先取它。
 - 固定窗口计数：窗口期内累加，窗口过期后从 1 重新开始。
 - 超限抛出 `RateLimitExceededException`；聊天服务的 `GlobalExceptionHandler` 将其转换为 `429 Too Many Requests`，并通过 `Retry-After` 返回建议重试秒数。
-- 计数保存在单机内存，适用于单实例部署；集群限流需要换成 Redis 等集中式存储。固定窗口在边界可能出现瞬时双倍流量，要求更平滑时可换成令牌桶或滑动窗口。
+- 存储实现通过配置切换，默认内存；多实例部署切换到 Redis。Redis 不可用时采取放行策略（fail-open），避免限流组件拖垮业务。
+- 固定窗口在边界可能出现瞬时双倍流量，要求更平滑时可换成令牌桶或滑动窗口。
+
+### 存储切换
+
+| 配置 | 默认值 | 说明 |
+|---|---|---|
+| `taoqi.rate-limit.store-type` | `memory` | `memory` 单机内存；`redis` 多实例共享 |
+
+Redis 模式需要在运行期引入 `spring-boot-starter-data-redis`（chat-server 已引入），并配置连接：
+
+```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+taoqi:
+  rate-limit:
+    store-type: redis
+```
+
+Redis 实现用 Lua 脚本原子完成“自增 + 首次设置过期 + 读取剩余 TTL”，key 形如 `方法签名#客户端IP`，所有实例共享同一份额度。
 
 ### 验证
 

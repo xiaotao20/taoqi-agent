@@ -33,6 +33,12 @@
             <artifactId>spring-boot-starter-webmvc</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Redis 限流存储；optional，只有选择 redis 模式时才需要在运行时引入 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: taoqi-agent-chat
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # 本机 Redis 若设置了密码，通过环境变量 REDIS_PASSWORD 注入
+      password: ${REDIS_PASSWORD:123456}
 
 logging:
   pattern:
@@ -11,6 +17,9 @@ logging:
     console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
 
 taoqi:
+  rate-limit:
+    # memory：单机内存；redis：多实例共享计数（本机 Redis 6379）
+    store-type: ${RATE_LIMIT_STORE_TYPE:redis}
   chat:
     # 测试接口的默认收件人地址
     test-email-to: ${CHAT_TEST_EMAIL_TO:1377417617@qq.com}
