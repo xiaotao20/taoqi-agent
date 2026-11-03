@@ -19,6 +19,12 @@ import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 邮件发送服务实现：通过 {@code JavaMailSender} 使用 QQ SMTP 发送邮件。
+ *
+ * @author xiaotao
+ * @date 2026-11-03
+ */
 @Service
 public class EmailServiceImpl implements EmailService {
 

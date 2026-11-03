@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
+/**
+ * 全局异常处理：把参数校验、请求体解析等异常统一转换为 {@code EmailSendResult}。
+ *
+ * @author xiaotao
+ * @date 2026-11-03
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

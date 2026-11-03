@@ -12,6 +12,7 @@
     <modules>
         <module>taoqi-agent-common</module>
         <module>taoqi-agent-integration</module>
+        <module>taoqi-agent-chat</module>
     </modules>
 
     <properties>
@@ -46,12 +47,26 @@
                 <artifactId>taoqi-agent-integration-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.taoqi</groupId>
+                <artifactId>taoqi-agent-chat-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
         <pluginManagement>
             <plugins>
+                <!-- 编译时保留方法参数名，Spring MVC / Feign 的参数绑定依赖该信息 -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.15.0</version>
+                    <configuration>
+                        <parameters>true</parameters>
+                    </configuration>
+                </plugin>
                 <!-- 子模块使用 spring-boot-maven-plugin 时无需指定版本 -->
                 <plugin>
                     <groupId>org.springframework.boot</groupId>

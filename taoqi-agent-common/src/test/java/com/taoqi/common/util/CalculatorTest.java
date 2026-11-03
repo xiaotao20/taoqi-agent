@@ -8,6 +8,12 @@ import org.junit.jupiter.params.provider.CsvSource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * {@code Calculator} 的单元测试。
+ *
+ * @author xiaotao
+ * @date 2026-11-03
+ */
 class CalculatorTest {
 
     @Test

@@ -24,6 +24,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@code EmailServiceImpl} 的单元测试：用模拟的 {@code JavaMailSender} 验证邮件组装与异常处理。
+ *
+ * @author xiaotao
+ * @date 2026-11-03
+ */
 class EmailServiceImplTest {
 
     private JavaMailSender mailSender;

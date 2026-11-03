@@ -6,6 +6,9 @@ package com.taoqi.integration.api.dto;
  * @param success      是否发送成功
  * @param messageId    邮件 Message-ID，发送成功时返回
  * @param errorMessage 失败原因，发送成功时为 null
+ *
+ * @author xiaotao
+ * @date 2026-11-03
  */
 public record EmailSendResult(boolean success, String messageId, String errorMessage) {
 

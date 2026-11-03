@@ -7,6 +7,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param from     发件人邮箱地址
  * @param personal 发件人显示名称
+ *
+ * @author xiaotao
+ * @date 2026-11-03
  */
 @ConfigurationProperties(prefix = "taoqi.mail")
 public record MailProperties(String from, String personal) {

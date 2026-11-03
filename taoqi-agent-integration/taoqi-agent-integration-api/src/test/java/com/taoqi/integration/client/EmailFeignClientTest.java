@@ -9,6 +9,12 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * {@code EmailFeignClient} 的契约测试：校验 Feign 解析出的请求方法与路径。
+ *
+ * @author xiaotao
+ * @date 2026-11-03
+ */
 class EmailFeignClientTest {
 
     @Test

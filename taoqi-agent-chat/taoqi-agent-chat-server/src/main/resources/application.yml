@@ -1,0 +1,14 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: taoqi-agent-chat
+
+taoqi:
+  chat:
+    # 测试接口的默认收件人地址
+    test-email-to: ${CHAT_TEST_EMAIL_TO:1377417617@qq.com}
+  integration:
+    # 邮件服务地址，Feign 客户端通过该配置调用
+    base-url: http://localhost:8081

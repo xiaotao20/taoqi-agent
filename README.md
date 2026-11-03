@@ -31,6 +31,9 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | `taoqi-agent-integration` | 第三方服务接入聚合模块（pom），下分接口契约与服务实现 |
 | └ `taoqi-agent-integration-api` | 接口契约：邮件 Feign 客户端与 DTO，供其它服务直接引入 |
 | └ `taoqi-agent-integration-server` | 服务实现：QQ 邮件发送、REST 接口，可独立启动 |
+| `taoqi-agent-chat` | 聊天模块聚合模块（pom），下分接口契约与服务实现 |
+| └ `taoqi-agent-chat-api` | 聊天模块的接口契约（暂未定义） |
+| └ `taoqi-agent-chat-server` | 聊天模块的服务实现：通过 Feign 调用邮件服务的测试接口，默认端口 8082 |
 
 > 后续将随 Agent 能力演进新增模块（如 Agent 核心运行时、模型接入、工具调用、记忆管理等），新增模块的依赖版本仍由父模块统一管理。
 
@@ -66,6 +69,18 @@ taoqi-agent
             │   └── service/        # 邮件发送逻辑
             ├── main/resources/application.yml
             └── test/java/com/taoqi/integration
+└── taoqi-agent-chat            # 聊天模块（聚合 pom）
+    ├── pom.xml
+    ├── taoqi-agent-chat-api    # 接口契约（暂未定义）
+    └── taoqi-agent-chat-server # 服务实现（Feign 调用示例）
+        └── src
+            ├── main/java/com/taoqi/chat
+            │   ├── ChatApplication.java
+            │   ├── config/         # 配置属性
+            │   ├── controller/     # 测试接口
+            │   └── facade/         # 门面层：封装 Feign 调用
+            ├── main/resources/application.yml
+            └── test/java/com/taoqi/chat
 ```
 
 ## 环境要求
@@ -135,12 +150,44 @@ curl -X POST http://localhost:8081/api/email/send \
 其它服务引入 `taoqi-agent-integration-api` 依赖后，在启动类或配置类上添加：
 
 ```java
-@EnableFeignClients(basePackages = "com.taoqi.integration.client")
+@EnableFeignClients(basePackages = "com.taoqi")
 ```
+
+各服务的 Feign 客户端统一放在 `com.taoqi.<domain>.client` 包下，扫描根包即可覆盖，新增服务无需修改启动类。
 
 随后注入 `EmailFeignClient` 即可调用邮件服务，目标地址由 `taoqi.integration.base-url` 配置（默认 `http://localhost:8081`）。
 
 > 授权码属于敏感信息，生产环境请通过环境变量或配置中心注入，不要提交到代码仓库。
+
+## 聊天模块
+
+`taoqi-agent-chat` 与 `taoqi-agent-common` 平级，同样按“聚合模块 + 接口/实现分离”组织：
+
+- `taoqi-agent-chat-api`：聊天模块的接口契约（暂未定义，先保留模块结构）
+- `taoqi-agent-chat-server`：聊天模块的服务实现，目前提供一个通过 Feign 调用邮件服务的测试接口，默认端口 8082
+
+调用链：`ChatController` → `ChatFacade` → `EmailFeignClient` → 邮件服务。
+
+### Feign 调用测试
+
+先启动邮件服务（8081），再启动聊天服务（8082）：
+
+```bash
+./mvnw -pl taoqi-agent-integration/taoqi-agent-integration-server spring-boot:run
+./mvnw -pl taoqi-agent-chat/taoqi-agent-chat-server spring-boot:run
+```
+
+调用测试接口，不传 `to` 时使用 `taoqi.chat.test-email-to` 配置的默认收件人：
+
+```bash
+curl "http://localhost:8082/api/chat/email/test?to=someone@example.com"
+```
+
+返回示例：
+
+```json
+{"success": true, "messageId": "<...@localhost>", "errorMessage": null}
+```
 
 ## 开发约定
 

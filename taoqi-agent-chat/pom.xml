@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.taoqi</groupId>
+        <artifactId>taoqi-agent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>taoqi-agent-chat</artifactId>
+    <packaging>pom</packaging>
+
+    <description>聊天模块（聚合模块）：下分接口契约与服务实现</description>
+
+    <modules>
+        <module>taoqi-agent-chat-api</module>
+        <module>taoqi-agent-chat-server</module>
+    </modules>
+
+</project>

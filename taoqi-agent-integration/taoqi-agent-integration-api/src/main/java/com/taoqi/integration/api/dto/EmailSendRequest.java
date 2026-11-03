@@ -15,6 +15,9 @@ import java.util.List;
  * @param subject 邮件主题
  * @param content 邮件正文
  * @param html    正文是否为 HTML，默认纯文本
+ *
+ * @author xiaotao
+ * @date 2026-11-03
  */
 public record EmailSendRequest(
         @NotEmpty(message = "收件人不能为空")
