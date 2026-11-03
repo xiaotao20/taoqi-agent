@@ -1,8 +1,9 @@
 package com.taoqi.integration.api;
 
 import jakarta.validation.Valid;
+import com.taoqi.common.result.R;
 import com.taoqi.integration.api.dto.EmailSendRequest;
-import com.taoqi.integration.api.dto.EmailSendResult;
+import com.taoqi.integration.api.dto.EmailSubmitResult;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -15,8 +16,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 public interface EmailApi {
 
     /**
-     * 发送邮件。
+     * 提交邮件发送任务：立即返回记录 ID 与状态，实际发送异步完成。
      */
     @PostMapping("/api/email/send")
-    EmailSendResult send(@Valid @RequestBody EmailSendRequest request);
+    R<EmailSubmitResult> send(@Valid @RequestBody EmailSendRequest request);
 }

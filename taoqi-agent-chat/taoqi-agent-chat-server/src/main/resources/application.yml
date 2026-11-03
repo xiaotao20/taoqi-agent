@@ -5,6 +5,11 @@ spring:
   application:
     name: taoqi-agent-chat
 
+logging:
+  pattern:
+    # 在日志中打印 taoqi-agent-starter 写入 MDC 的 traceId，未生成时显示 -
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+
 taoqi:
   chat:
     # 测试接口的默认收件人地址

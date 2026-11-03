@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.taoqi.integration.mapper.EmailSendRecordMapper">
+
+    <!-- 基础 CRUD 与条件分页由 MyBatis-Plus 生成，这里只保留聚合类复杂 SQL -->
+
+    <resultMap id="DailySendStatMap" type="com.taoqi.integration.api.dto.DailySendStat">
+        <result column="stat_date" property="statDate"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="success_count" property="successCount"/>
+        <result column="failure_count" property="failureCount"/>
+        <result column="sending_count" property="sendingCount"/>
+        <result column="avg_cost_millis" property="avgCostMillis"/>
+    </resultMap>
+
+    <resultMap id="TopRecipientMap" type="com.taoqi.integration.api.dto.TopRecipient">
+        <result column="recipient" property="recipient"/>
+        <result column="send_count" property="sendCount"/>
+    </resultMap>
+
+    <select id="selectDailyStats" resultMap="DailySendStatMap">
+        SELECT DATE(created_at)                                        AS stat_date,
+               COUNT(*)                                                AS total_count,
+               SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END)     AS success_count,
+               SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END)      AS failure_count,
+               SUM(CASE WHEN status = 'SENDING' THEN 1 ELSE 0 END)     AS sending_count,
+               ROUND(AVG(cost_millis), 2)                              AS avg_cost_millis
+        FROM email_send_record
+        WHERE created_at &gt;= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY stat_date DESC
+    </select>
+
+    <select id="selectTopRecipients" resultMap="TopRecipientMap">
+        WITH RECURSIVE seq AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT n + 1 FROM seq WHERE n &lt; 10
+        )
+        SELECT recipient, COUNT(*) AS send_count
+        FROM (
+            SELECT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.to_addresses, ',', seq.n), ',', -1)) AS recipient
+            FROM email_send_record r
+            JOIN seq
+              ON seq.n &lt;= 1 + CHAR_LENGTH(r.to_addresses) - CHAR_LENGTH(REPLACE(r.to_addresses, ',', ''))
+        ) t
+        WHERE recipient &lt;&gt; ''
+        GROUP BY recipient
+        ORDER BY send_count DESC, recipient ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

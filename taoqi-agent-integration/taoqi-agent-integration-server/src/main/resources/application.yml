@@ -22,12 +22,42 @@ spring:
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
+  datasource:
+    # 本地 MySQL 默认端口 3306，数据库名 taoqi-agent，建表脚本见 resources/db/schema.sql
+    # createDatabaseIfNotExist：数据库不存在时由驱动自动创建，再执行下面的建表脚本
+    url: jdbc:mysql://localhost:3306/taoqi-agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: ${MYSQL_USERNAME:root}
+    password: "${MYSQL_PASSWORD:123456}"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      # 每次启动都执行建表脚本；脚本使用 IF NOT EXISTS，可重复执行
+      mode: always
+      schema-locations: classpath:db/schema.sql
+      encoding: UTF-8
+
+mybatis-plus:
+  # 自定义 SQL 位于 resources/mapper 下
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      # 主键使用数据库自增
+      id-type: auto
 
 taoqi:
+  email:
+    async:
+      # 邮件异步发送线程池：核心/最大线程数与队列容量
+      core-pool-size: 2
+      max-pool-size: 4
+      queue-capacity: 100
   mail:
     # 发件人地址默认与 SMTP 账号一致，可通过环境变量 QQ_MAIL_USERNAME 覆盖
     from: ${QQ_MAIL_USERNAME:1377417617@qq.com}
-    personal: Taoqi Agent
+    personal: ChatGPT
+#    personal: Taoqi Agent
   integration:
     # 其它服务通过 Feign 调用本服务的地址
     base-url: http://localhost:8081

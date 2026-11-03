@@ -11,6 +11,8 @@
     </parent>
 
     <artifactId>taoqi-agent-integration</artifactId>
+    <!-- 服务独立版本号：修改时同步根 pom 的 taoqi-agent-integration.version 及子模块 parent 版本 -->
+    <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <description>第三方服务接入模块（聚合模块）：下分接口契约与服务实现</description>

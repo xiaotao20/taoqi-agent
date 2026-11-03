@@ -11,6 +11,8 @@
     </parent>
 
     <artifactId>taoqi-agent-chat</artifactId>
+    <!-- 服务独立版本号：修改时同步根 pom 的 taoqi-agent-chat.version 及子模块 parent 版本 -->
+    <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <description>聊天模块（聚合模块）：下分接口契约与服务实现</description>

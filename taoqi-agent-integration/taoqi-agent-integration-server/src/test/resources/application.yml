@@ -1,0 +1,28 @@
+server:
+  port: 0
+
+spring:
+  mail:
+    # 测试不会真正连 SMTP，仅用于装配 JavaMailSender Bean
+    host: localhost
+    port: 25
+  datasource:
+    # 单元测试使用 H2 内存库，避免依赖本地 MySQL
+    url: jdbc:h2:mem:taoqi;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+taoqi:
+  mail:
+    # 测试用发件人，配合模拟的 JavaMailSender
+    from: sender@qq.com
+    personal: Taoqi Agent Test
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto

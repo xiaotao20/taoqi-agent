@@ -13,6 +13,7 @@
         <module>taoqi-agent-common</module>
         <module>taoqi-agent-integration</module>
         <module>taoqi-agent-chat</module>
+        <module>taoqi-agent-starter</module>
     </modules>
 
     <properties>
@@ -21,6 +22,12 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>4.1.2</spring-boot.version>
         <spring-cloud.version>2025.1.4</spring-cloud.version>
+        <mybatis-plus.version>3.5.18</mybatis-plus.version>
+        <!-- 各服务独立版本号：升级某个服务时只改对应属性，不影响其它服务 -->
+        <taoqi-agent-common.version>1.0-SNAPSHOT</taoqi-agent-common.version>
+        <taoqi-agent-integration.version>1.0-SNAPSHOT</taoqi-agent-integration.version>
+        <taoqi-agent-chat.version>1.0-SNAPSHOT</taoqi-agent-chat.version>
+        <taoqi-agent-starter.version>1.0-SNAPSHOT</taoqi-agent-starter.version>
     </properties>
 
     <dependencyManagement>
@@ -41,16 +48,44 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- 项目内部模块：子模块引用时不写版本号 -->
+            <!-- MyBatis-Plus：Boot 4 专用 starter -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <!-- 实体注解（@TableName、@TableId） -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-annotation</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <!-- 分页插件依赖的 SQL 解析器 -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <!-- 项目内部模块：各服务独立版本，使用方引用时不写版本号 -->
+            <dependency>
+                <groupId>com.taoqi</groupId>
+                <artifactId>taoqi-agent-common</artifactId>
+                <version>${taoqi-agent-common.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.taoqi</groupId>
                 <artifactId>taoqi-agent-integration-api</artifactId>
-                <version>${project.version}</version>
+                <version>${taoqi-agent-integration.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.taoqi</groupId>
                 <artifactId>taoqi-agent-chat-api</artifactId>
-                <version>${project.version}</version>
+                <version>${taoqi-agent-chat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.taoqi</groupId>
+                <artifactId>taoqi-agent-starter</artifactId>
+                <version>${taoqi-agent-starter.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

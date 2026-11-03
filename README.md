@@ -15,6 +15,9 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | 基础框架 | Spring Boot | 4.1.2 |
 | 服务通信 | Spring Cloud（OpenFeign） | 2025.1.4（OpenFeign 5.0.4） |
 | 邮件发送 | Spring Boot Mail（SMTP） | 由 spring-boot-starter-mail 管理 |
+| 持久层 | MyBatis-Plus | 3.5.18（Boot 4 专用 starter） |
+| 本地缓存 | Caffeine | 由 Spring Boot BOM 管理 |
+| 数据库 | MySQL（本地） | 8.x |
 | 单元测试 | JUnit Jupiter | 6.0.3（由 spring-boot-starter-test 管理） |
 | 断言库 | AssertJ | 3.27.7（由 spring-boot-starter-test 管理） |
 | Mock 框架 | Mockito | 5.23.0（由 spring-boot-starter-test 管理） |
@@ -27,13 +30,14 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | 模块 | 说明 |
 |---|---|
 | `taoqi-agent` | 父模块（pom），统一管理依赖版本、插件版本与构建配置 |
-| `taoqi-agent-common` | 公共模块：通用工具类、常量、公共配置等 |
+| `taoqi-agent-common` | 公共模块：通用工具类、`@RateLimit` 限流注解等通用能力 |
 | `taoqi-agent-integration` | 第三方服务接入聚合模块（pom），下分接口契约与服务实现 |
 | └ `taoqi-agent-integration-api` | 接口契约：邮件 Feign 客户端与 DTO，供其它服务直接引入 |
-| └ `taoqi-agent-integration-server` | 服务实现：QQ 邮件发送、REST 接口，可独立启动 |
+| └ `taoqi-agent-integration-server` | 服务实现：QQ 邮件发送、发送记录入库、REST 接口，可独立启动 |
 | `taoqi-agent-chat` | 聊天模块聚合模块（pom），下分接口契约与服务实现 |
 | └ `taoqi-agent-chat-api` | 聊天模块的接口契约（暂未定义） |
 | └ `taoqi-agent-chat-server` | 聊天模块的服务实现：通过 Feign 调用邮件服务的测试接口，默认端口 8082 |
+| `taoqi-agent-starter` | 自定义 Spring Boot Starter：引入即自动为 Servlet 应用加上 traceId 与访问日志 |
 
 > 后续将随 Agent 能力演进新增模块（如 Agent 核心运行时、模型接入、工具调用、记忆管理等），新增模块的依赖版本仍由父模块统一管理。
 
@@ -48,26 +52,44 @@ taoqi-agent
 ├── taoqi-agent-common          # 公共模块
 │   └── src
 │       ├── main/java/com/taoqi/common
+│       │   ├── annotation/       # @RateLimit 限流注解
+│       │   ├── aspect/           # RateLimitAspect 切面实现
+│       │   ├── autoconfigure/    # RateLimitAutoConfiguration 自动配置
+│       │   ├── exception/        # RateLimitExceededException
+│       │   ├── result/           # R 统一返回结果
 │       │   └── util/Calculator.java
+│       ├── main/resources/META-INF/spring
+│       │   └── org.springframework.boot.autoconfigure.AutoConfiguration.imports
 │       └── test/java/com/taoqi/common
+│           ├── aspect/
+│           ├── autoconfigure/
+│           ├── result/
 │           └── util/CalculatorTest.java
 └── taoqi-agent-integration     # 第三方服务接入模块（聚合 pom）
     ├── pom.xml
-    ├── taoqi-agent-integration-api    # 接口契约（Feign + DTO）
+    ├── taoqi-agent-integration-api    # 接口契约（Feign + DTO + 实体）
     │   └── src
     │       ├── main/java/com/taoqi/integration
     │       │   ├── api/            # EmailApi 接口契约与 DTO
-    │       │   └── client/         # EmailFeignClient
+    │       │   ├── client/         # EmailFeignClient
+    │       │   ├── entity/         # EmailSendRecordEntity 实体
+    │       │   └── enums/          # EmailSendStatus 发送状态
     │       └── test/java/com/taoqi/integration/client
     └── taoqi-agent-integration-server # 服务实现（可独立启动）
         └── src
             ├── main/java/com/taoqi/integration
             │   ├── IntegrationApplication.java
             │   ├── config/         # 配置属性
-            │   ├── controller/     # REST 接口
+            │   ├── controller/     # REST 接口（邮件发送、记录查询）
+            │   ├── event/          # EmailSendEvent 与异步监听器
             │   ├── exception/      # 全局异常处理
-            │   └── service/        # 邮件发送逻辑
-            ├── main/resources/application.yml
+            │   ├── mapper/         # EmailSendRecordMapper
+            │   ├── service/        # 邮件提交与记录状态维护
+            │   └── task/           # EmailSendTask 异步发送任务
+            ├── main/resources
+            │   ├── application.yml
+            │   ├── db/schema.sql   # MySQL 建库建表脚本
+            │   └── mapper/         # EmailSendRecordMapper.xml
             └── test/java/com/taoqi/integration
 └── taoqi-agent-chat            # 聊天模块（聚合 pom）
     ├── pom.xml
@@ -76,11 +98,25 @@ taoqi-agent
         └── src
             ├── main/java/com/taoqi/chat
             │   ├── ChatApplication.java
+            │   ├── cache/          # VerificationCodeCache 验证码本地缓存
             │   ├── config/         # 配置属性
-            │   ├── controller/     # 测试接口
-            │   └── facade/         # 门面层：封装 Feign 调用
+            │   ├── constant/       # 邮件 HTML 模板与验证码常量
+            │   ├── controller/     # 测试接口、验证码接口
+            │   ├── dto/            # 请求参数
+            │   ├── facade/         # 门面层：封装 Feign 调用
+            │   ├── handler/        # 全局异常处理
+            │   └── service/        # 验证码服务
             ├── main/resources/application.yml
             └── test/java/com/taoqi/chat
+└── taoqi-agent-starter         # 自定义 Starter（自动配置）
+    └── src
+        ├── main/java/com/taoqi/starter/accesslog
+        │   ├── AccessLogProperties.java            # 配置属性
+        │   ├── TaoqiAccessLogAutoConfiguration.java # 自动配置入口
+        │   └── TraceIdFilter.java                  # traceId 与访问日志过滤器
+        ├── main/resources/META-INF/spring
+        │   └── org.springframework.boot.autoconfigure.AutoConfiguration.imports
+        └── test/java/com/taoqi/starter/accesslog
 ```
 
 ## 环境要求
@@ -145,6 +181,19 @@ curl -X POST http://localhost:8081/api/email/send \
       }'
 ```
 
+接口是异步的：收到请求后立即落一条状态为 `SENDING` 的记录并返回记录 ID，SMTP 发送在独立线程池中完成。返回示例（所有接口统一使用 `R` 包装）：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {"recordId": 1, "status": "SENDING", "message": "邮件已提交，正在发送"},
+  "success": true
+}
+```
+
+发送结果通过 `GET /api/email/records/{id}` 查询，状态会更新为 `SUCCESS` 或 `FAILED`。
+
 ### Feign 客户端
 
 其它服务引入 `taoqi-agent-integration-api` 依赖后，在启动类或配置类上添加：
@@ -155,9 +204,85 @@ curl -X POST http://localhost:8081/api/email/send \
 
 各服务的 Feign 客户端统一放在 `com.taoqi.<domain>.client` 包下，扫描根包即可覆盖，新增服务无需修改启动类。
 
-随后注入 `EmailFeignClient` 即可调用邮件服务，目标地址由 `taoqi.integration.base-url` 配置（默认 `http://localhost:8081`）。
+随后注入 `EmailFeignClient` 即可调用邮件服务，返回类型是统一的 `R<EmailSendResult>`：
+
+```java
+R<EmailSubmitResult> result = emailFeignClient.send(request);
+EmailSubmitResult data = result.data();   // recordId + status + message
+```
+
+目标地址由 `taoqi.integration.base-url` 配置（默认 `http://localhost:8081`）。
 
 > 授权码属于敏感信息，生产环境请通过环境变量或配置中心注入，不要提交到代码仓库。
+
+### 邮件发送记录（MyBatis-Plus）
+
+每次调用发信接口都会先写入一条状态为 `SENDING` 的记录并立即返回，SMTP 发送在线程池中异步执行；完成后把状态更新为 `SUCCESS` 或 `FAILED`，并写入 `message_id`、`error_message`、`cost_millis` 和 `sent_at`。
+
+#### 初始化数据库
+
+默认连接 `jdbc:mysql://localhost:3306/taoqi-agent`，用户名 `root`、密码 `123456`，可通过环境变量 `MYSQL_USERNAME` / `MYSQL_PASSWORD` 覆盖。
+
+应用启动时会自动执行 `resources/db/schema.sql` 建表（配置为 `spring.sql.init.mode=always`），脚本使用 `CREATE ... IF NOT EXISTS`，可以重复执行；JDBC URL 带了 `createDatabaseIfNotExist=true`，数据库不存在时先由驱动创建。因此首次启动只需保证 MySQL 已运行、账号有建库建表权限，无需手动执行 SQL。
+
+如果账号没有建库权限，或想手动初始化，也可以直接执行：
+
+```bash
+mysql -u root -p < taoqi-agent-integration/taoqi-agent-integration-server/src/main/resources/db/schema.sql
+```
+
+脚本会用 `utf8mb4` 创建数据库 `taoqi-agent` 和表 `email_send_record`，并为创建时间、成功状态、收件人建立索引。
+
+#### 数据模型
+
+实体 `EmailSendRecordEntity` 位于 `taoqi-agent-integration-api` 的 `entity` 包，用 `@TableName("email_send_record")` 指定表名、`@TableId(type = IdType.AUTO)` 指定自增主键，字段按下划线规则映射列名。api 模块只引入 `mybatis-plus-annotation`，不引入整个 ORM。
+
+发送状态用枚举 `EmailSendStatus`（`SENDING` / `SUCCESS` / `FAILED`）定义，数据库以枚举名存储，MyBatis 按名称映射。
+
+#### 异步发送
+
+`EmailService.submit` 只做“校验 + 落库 + 发布事件”；`EmailSendListener` 用 `@Async("emailSendExecutor")` + `@EventListener` 消费 `EmailSendEvent`，再调用执行组件 `EmailSendTask` 完成 SMTP 发送并回写状态。执行组件本身不加 `@Async`，职责单一，也保留可以直接调用的测试入口。
+
+发送动作与业务逻辑通过事件解耦：以后要加审计、发送指标、失败重试等能力，只需新增监听器，`EmailService` 不用改。如果给 `submit` 加上事务，可以把监听改成 `@TransactionalEventListener(phase = AFTER_COMMIT)`，确保记录提交后再发送，避免异步线程读到未提交数据。
+
+线程池通过 `AsyncConfig` 注册，参数由 `taoqi.email.async` 配置：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `taoqi.email.async.core-pool-size` | 2 | 核心线程数 |
+| `taoqi.email.async.max-pool-size` | 4 | 最大线程数 |
+| `taoqi.email.async.queue-capacity` | 100 | 队列容量 |
+
+线程名前缀 `email-send-`；队列满时使用 `CallerRunsPolicy`（由请求线程执行，形成背压而不是丢任务）；关闭时等待在途任务完成，最多 30 秒，避免记录停留在“发送中”。
+
+**为什么用线程池而不是异步回调**：`JavaMailSender` 是阻塞式 API，没有回调/Future 形式的发送入口，所以“异步回调”在这里没有落点；线程池 + `@Async` 改动最小，还能限制并发连接数、保护 SMTP 服务。
+
+**当前方案的边界**：任务只存在于内存队列，进程重启会丢失未发送的任务，对应记录会一直是 `SENDING`。如果要更强保证，可以加一个定时任务把超时 `SENDING` 记录置为 `FAILED` 或重新投递，或者改用消息队列（RabbitMQ / Kafka）承载发送任务以获得持久化和重试能力。
+
+#### MyBatis-Plus 与 XML 的分工
+
+- **简单操作走 MyBatis-Plus**：`EmailRecordServiceImpl` 继承 `ServiceImpl`，记录写入用 `save`、主键查询用 `getById`、条件分页用 `IService.page` + `LambdaQueryWrapper`（主题模糊、成功状态、时间范围、排序；收件人用 `apply("FIND_IN_SET...")` 精确匹配逗号分隔列表）。分页插件在 `MybatisPlusConfig` 中注册，依赖 `mybatis-plus-jsqlparser`。
+- **复杂 SQL 走 XML**：`resources/mapper/EmailSendRecordMapper.xml` 只保留聚合查询：
+  - `selectDailyStats`：按天聚合总数、成功数、失败数、平均耗时（`CASE WHEN` + `GROUP BY`）；
+  - `selectTopRecipients`：用递归 CTE + `SUBSTRING_INDEX` 把逗号分隔的收件人拆开，统计发送次数排行（MySQL 8+）。
+
+#### 查询接口
+
+```bash
+# 分页查询，返回 R<IPage<EmailSendRecordEntity>>，支持 to、subject、status、startTime、endTime、page、size
+curl "http://localhost:8081/api/email/records?to=1377417617@qq.com&status=SUCCESS&page=1&size=10"
+
+# 按主键查询单条记录（MyBatis-Plus getById）
+curl "http://localhost:8081/api/email/records/1"
+
+# 最近 7 天每日统计
+curl "http://localhost:8081/api/email/records/daily-stats?days=7"
+
+# 收件人 Top 5
+curl "http://localhost:8081/api/email/records/top-recipients?limit=5"
+```
+
+> 单元测试使用 H2 内存库验证实体映射与基础 CRUD；复杂 SQL 依赖 MySQL 8 的递归 CTE 与字符串函数，需要在本地数据库上验证。
 
 ## 聊天模块
 
@@ -166,7 +291,11 @@ curl -X POST http://localhost:8081/api/email/send \
 - `taoqi-agent-chat-api`：聊天模块的接口契约（暂未定义，先保留模块结构）
 - `taoqi-agent-chat-server`：聊天模块的服务实现，目前提供一个通过 Feign 调用邮件服务的测试接口，默认端口 8082
 
-调用链：`ChatController` → `ChatFacade` → `EmailFeignClient` → 邮件服务。
+调用链：`ChatController` → `EmailClientFacade` → `EmailFeignClient` → 邮件服务。
+
+Facade 按被调用的服务命名（邮件服务对应 `EmailClientFacade`），职责是拆包 client 返回的 `R`，向上只暴露业务数据；controller 再统一用 `R` 包装响应。
+
+聊天服务同时引入了 `taoqi-agent-starter`，请求会自动带上 traceId 并打印访问日志；并使用了 common 模块的 `@RateLimit` 注解限制接口调用频率。此外提供一个连通性接口 `GET /api/chat/ping`（每来源 30 秒内最多 2 次），便于验证限流。详见后文。
 
 ### Feign 调用测试
 
@@ -186,12 +315,196 @@ curl "http://localhost:8082/api/chat/email/test?to=someone@example.com"
 返回示例：
 
 ```json
-{"success": true, "messageId": "<...@localhost>", "errorMessage": null}
+{
+  "code": 200,
+  "message": "success",
+  "data": {"recordId": 1, "status": "SENDING", "message": "邮件已提交，正在发送"},
+  "success": true
+}
+```
+
+邮件是异步发送的，最终结果要到邮件服务的 `/api/email/records/{id}` 查询。
+
+### 邮箱验证码
+
+`POST /api/chat/verification-code` 生成 6 位验证码，写入本地缓存（5 分钟过期），并通过 HTML 模板发送验证码邮件。模板在 `EmailTemplateConstants`，风格参考 ChatGPT 的验证邮件；占位符使用 `{{code}}`、`{{expireMinutes}}`，避免和 CSS 中的百分号冲突。
+
+```bash
+curl -X POST http://localhost:8082/api/chat/verification-code \
+  -H "Content-Type: application/json" \
+  -d '{"email":"someone@example.com"}'
+```
+
+返回示例：
+
+```json
+{"code":200,"message":"success","data":{"recordId":3,"status":"SENDING","message":"邮件已提交，正在发送"},"success":true}
+```
+
+说明：
+
+- 接口复用 common 的 `@RateLimit`，每个来源每分钟最多 3 次；邮箱为空或格式错误返回 400；
+- 验证码保存在 `VerificationCodeCache`，基于 Caffeine 实现（`expireAfterWrite` 5 分钟、最大 10000 条），同一邮箱重新发送会覆盖旧码，`verify` 成功一次后立即失效；
+- 本地缓存只适用于单实例部署，多实例需要换成 Redis 等集中式缓存；
+- 目前只提供发送接口，校验能力在 `VerificationCodeCache#verify`，需要时可再暴露校验接口。
+
+## 自定义 Starter：taoqi-agent-starter
+
+`taoqi-agent-starter` 演示 Spring Boot Starter 的完整实现方式：使用方只需引入依赖，不写任何 `@EnableXxx` 注解、不做额外配置，功能就自动生效。
+
+### 功能
+
+自动为 Servlet Web 应用加上请求级 traceId 和访问日志：
+
+- 请求头 `X-Trace-Id` 有值时直接复用（便于跨服务串联），没有则生成 16 位 ID；
+- traceId 回写到响应头，同时写入 MDC，日志格式里用 `%X{traceId}` 即可打印；
+- 请求结束后打印方法、路径、状态码与耗时，超过阈值打印 WARN 慢请求日志；
+- 支持整体关闭、自定义头名 / MDC 键、排除路径。
+
+### 实现构成
+
+| 文件 | 作用 |
+|---|---|
+| `TaoqiAccessLogAutoConfiguration` | 自动配置入口，用 `@AutoConfiguration` + 条件注解声明何时生效 |
+| `AccessLogProperties` | `@ConfigurationProperties(prefix = "taoqi.access-log")`，绑定配置并生成 IDE 元数据 |
+| `TraceIdFilter` | `OncePerRequestFilter`，真正干活的过滤器 |
+| `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` | 告诉 Spring Boot 启动时加载哪个自动配置类 |
+
+关键点：
+
+1. **注册方式**：Boot 3 起不再用 `spring.factories`，自动配置类的全限定名写进 `AutoConfiguration.imports` 文件，启动时由 `@EnableAutoConfiguration`（`@SpringBootApplication` 已包含）读取。自动配置类不需要落在使用方的组件扫描路径下。
+2. **条件装配**：`@ConditionalOnWebApplication` 限制只在 Servlet 应用生效，`@ConditionalOnProperty` 提供开关，`@ConditionalOnClass` 在类路径缺少 Web 相关类时安全退出。
+3. **自动退让**：`@ConditionalOnMissingBean` 让使用方可以自己声明 `TraceIdFilter`，覆盖默认实现。
+4. **依赖 optional**：过滤器依赖 Web 环境，starter 中把 `spring-boot-starter-webmvc` 声明为 `optional`，非 Web 应用引入时不会被拖入 Tomcat。
+5. **配置元数据**：`spring-boot-configuration-processor` 在编译期生成 `spring-configuration-metadata.json`，IDE 里输入 `taoqi.access-log.` 会有配置提示。
+
+### 配置项
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `taoqi.access-log.enabled` | `true` | 是否启用 |
+| `taoqi.access-log.header-name` | `X-Trace-Id` | traceId 头名称 |
+| `taoqi.access-log.mdc-key` | `traceId` | MDC 键名 |
+| `taoqi.access-log.slow-threshold` | `1s` | 慢请求阈值 |
+| `taoqi.access-log.exclude-path-patterns` | 空 | 排除路径，Ant 风格，如 `/actuator/**` |
+
+### 使用
+
+其它模块引入依赖即可，版本由父模块统一管理：
+
+```xml
+<dependency>
+    <groupId>com.taoqi</groupId>
+    <artifactId>taoqi-agent-starter</artifactId>
+</dependency>
+```
+
+要在日志中看到 traceId，需要在自己的日志格式里引用 MDC，例如 `taoqi-agent-chat-server` 的 `application.yml`：
+
+```yaml
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+```
+
+验证：启动聊天服务后请求任意地址（404 也会被记录）：
+
+```bash
+curl -i http://localhost:8082/api/chat/ping
+# 响应头包含 X-Trace-Id: 44859a7e59c944c3
+
+curl -i -H "X-Trace-Id: demo-123" http://localhost:8082/api/chat/ping
+# 响应头回显 X-Trace-Id: demo-123
+```
+
+日志输出：
+
+```
+15:46:17.011 INFO  [44859a7e59c944c3] c.t.starter.accesslog.TraceIdFilter - GET /api/chat/ping -> 404，耗时 9 ms，traceId=44859a7e59c944c3
+```
+
+> 命名约定：社区习惯把 starter 命名为 `xxx-spring-boot-starter`，自动配置单独拆成 `xxx-spring-boot-autoconfigure`；当 starter 依赖较多 optional 组件时才需要拆分，像本模块这样只有一个可选 Web 依赖时，单模块更直观。
+
+## 公共能力：@RateLimit 限流注解
+
+`taoqi-agent-common` 提供 `@RateLimit` 注解，用于限制方法（通常是 HTTP 接口）的调用频率，防止接口被刷、重复发信等。common 模块内置自动配置，使用方引入依赖后加注解即可。
+
+### 用法
+
+```java
+@RateLimit(limit = 5, windowSeconds = 60)
+@GetMapping("/api/chat/email/test")
+public EmailSendResult sendTestEmail(...) { ... }
+```
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `limit` | 10 | 时间窗口内允许的最大调用次数 |
+| `windowSeconds` | 60 | 时间窗口长度（秒） |
+| `key` | 空 | 自定义限流 key 前缀，留空时使用方法签名 |
+
+### 实现
+
+| 文件 | 作用 |
+|---|---|
+| `annotation/RateLimit` | 注解定义 |
+| `aspect/RateLimitAspect` | AOP 切面：固定时间窗口计数 |
+| `exception/RateLimitExceededException` | 超限异常，携带建议重试秒数 |
+| `autoconfigure/RateLimitAutoConfiguration` | 自动注册切面，通过 `META-INF/spring/...imports` 生效 |
+
+规则：
+
+- 限流 key = 方法签名（或注解 `key`）+ 调用方 IP，同一接口不同客户端互不影响；有 `X-Forwarded-For` 时优先取它。
+- 固定窗口计数：窗口期内累加，窗口过期后从 1 重新开始。
+- 超限抛出 `RateLimitExceededException`；聊天服务的 `GlobalExceptionHandler` 将其转换为 `429 Too Many Requests`，并通过 `Retry-After` 返回建议重试秒数。
+- 计数保存在单机内存，适用于单实例部署；集群限流需要换成 Redis 等集中式存储。固定窗口在边界可能出现瞬时双倍流量，要求更平滑时可换成令牌桶或滑动窗口。
+
+### 验证
+
+```bash
+curl -i http://localhost:8082/api/chat/ping   # 第 1、2 次：200，返回 R 结构
+curl -i http://localhost:8082/api/chat/ping   # 第 3 次：429，Retry-After: 30
+```
+
+## 公共能力：统一返回结果 R
+
+`taoqi-agent-common` 的 `R<T>` 用于统一 HTTP 接口返回结构，字段固定为 `code`、`message`、`data`、`success`。`data` 是泛型，单个对象、列表、分页数据都能直接放，例如 `R<List<User>>`。
+
+项目所有 REST 接口（含 Feign 契约）的响应体都使用 `R`；分页接口直接使用 `R<IPage<T>>`，把 MyBatis-Plus 查出的分页对象原样作为 `data` 返回。
+
+### 静态方法
+
+| 方法 | 说明 |
+|---|---|
+| `R.data(data)` | 成功并携带数据 |
+| `R.list(list)` | 成功并携带列表数据（等价于 `R.data(list)`，语义更明确） |
+| `R.ok()` | 成功且无数据，返回 `R<Void>` |
+| `R.success(message, data)` | 成功并自定义提示信息 |
+| `R.fail(message)` | 失败，状态码默认 `R.FAIL_CODE`（500） |
+| `R.fail(code, message)` | 失败并指定业务状态码 |
+| `R.fail(code, message, data)` | 失败并携带补充数据 |
+| `R.of(code, message, data, success)` | 完全自定义 |
+
+### 使用
+
+```java
+R<User> user = R.data(user);
+R<List<User>> users = R.list(userList);
+R<IPage<User>> page = R.data(pageResult);   // 直接放 MyBatis-Plus 的分页对象
+R<Void> failed = R.fail("参数错误");
+```
+
+聊天服务的 `GET /api/chat/ping` 已改为返回 `R<String>`，响应示例：
+
+```json
+{"code":200,"message":"success","data":"pong","success":true}
 ```
 
 ## 开发约定
 
-- 依赖版本统一在父模块 `pom.xml` 的 `dependencyManagement` 中管理，子模块引用依赖时不写 `<version>`。
+- **各服务独立版本号**：根目录下每个服务模块在自身 `pom.xml` 中声明自己的 `<version>`，根 `pom.xml` 中用同名独立属性（`taoqi-agent-common.version`、`taoqi-agent-integration.version`、`taoqi-agent-chat.version`、`taoqi-agent-starter.version`）供 `dependencyManagement` 引用。升级某个服务时只改它自己的版本号，不影响其它服务；服务下的 `-api` / `-server` 跟随所属服务的版本。
+- 升级带子模块的服务（如 `taoqi-agent-integration`）时，需同步修改：服务自身 `<version>`、其子模块 `parent` 中的 `<version>`、根 pom 中对应的版本属性。
+- 第三方依赖版本统一在父模块 `pom.xml` 的 `dependencyManagement` 中管理，子模块引用依赖时不写 `<version>`；内部服务之间的依赖也由父模块按各自版本属性统一管理。
 - 新增依赖时，版本属性（如 `<xxx.version>`）和 BOM / 依赖条目写在父模块。
 - 服务类模块的拆分方式：与 `taoqi-agent-common` 平级的聚合模块（如 `taoqi-agent-integration`）下再建 `-api`（接口契约、Feign 客户端、DTO）和 `-server`（服务实现）两个子模块，其它服务只需引入 `-api` 模块。
 - 源码与构建统一使用 UTF-8 编码。

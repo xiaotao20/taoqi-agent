@@ -11,6 +11,8 @@
     </parent>
 
     <artifactId>taoqi-agent-common</artifactId>
+    <!-- 服务独立版本号：修改时同步根 pom 的 taoqi-agent-common.version -->
+    <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <description>公共模块：通用工具类、常量、公共配置等</description>
@@ -19,6 +21,17 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- @RateLimit 的切面实现依赖 AspectJ（Boot 4 中 AOP starter 更名为 aspectj） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
+        </dependency>
+        <!-- 限流按调用方 IP 区分；声明为 optional，非 Web 应用引入 common 时不会被动引入 Web 环境 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
