@@ -1,6 +1,7 @@
 package com.taoqi.chat.controller;
 
 import com.taoqi.chat.dto.VerificationCodeRequest;
+import com.taoqi.chat.dto.VerificationCodeVerifyRequest;
 import com.taoqi.chat.service.VerificationCodeService;
 import com.taoqi.common.result.R;
 import com.taoqi.integration.api.dto.EmailSubmitResult;
@@ -41,5 +42,30 @@ class VerificationCodeControllerTest {
         assertThat(result.success()).isTrue();
         assertThat(result.data().recordId()).isEqualTo(9L);
         verify(verificationCodeService).send("user@example.com");
+    }
+
+    @Test
+    @DisplayName("验证码正确时返回成功结果")
+    void verifiesCodeAndReturnsOk() {
+        when(verificationCodeService.verify("user@example.com", "123456")).thenReturn(true);
+
+        R<Void> result = controller.verify(new VerificationCodeVerifyRequest("user@example.com", "123456"));
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.code()).isEqualTo(200);
+        verify(verificationCodeService).verify("user@example.com", "123456");
+    }
+
+    @Test
+    @DisplayName("验证码错误时返回业务码 400")
+    void rejectsWrongCode() {
+        when(verificationCodeService.verify("user@example.com", "654321")).thenReturn(false);
+
+        R<Void> result = controller.verify(new VerificationCodeVerifyRequest("user@example.com", "654321"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.code()).isEqualTo(400);
+        assertThat(result.message()).contains("验证码错误");
+        verify(verificationCodeService).verify("user@example.com", "654321");
     }
 }

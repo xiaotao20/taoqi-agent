@@ -3,7 +3,7 @@ package com.taoqi.chat.service;
 import java.security.SecureRandom;
 import java.util.List;
 
-import com.taoqi.chat.cache.VerificationCodeCache;
+import com.taoqi.chat.cache.VerificationCodeStore;
 import com.taoqi.chat.constant.EmailTemplateConstants;
 import com.taoqi.chat.constant.VerificationCodeConstants;
 import com.taoqi.chat.facade.EmailClientFacade;
@@ -13,7 +13,7 @@ import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 /**
- * 邮箱验证码服务：生成验证码、写入本地缓存，并通过邮件服务发送 HTML 邮件。
+ * 邮箱验证码服务：生成验证码、写入验证码存储（默认 Redis），并通过邮件服务发送 HTML 邮件。
  *
  * @author xiaotao
  * @date 2026-11-03
@@ -24,7 +24,7 @@ public class VerificationCodeService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     @Resource
-    private VerificationCodeCache verificationCodeCache;
+    private VerificationCodeStore verificationCodeStore;
 
     @Resource
     private EmailClientFacade emailClientFacade;
@@ -34,7 +34,7 @@ public class VerificationCodeService {
      */
     public EmailSubmitResult send(String email) {
         String code = generateCode();
-        verificationCodeCache.put(email, code);
+        verificationCodeStore.put(email, code);
 
         String html = EmailTemplateConstants.verificationCodeHtml(code, VerificationCodeConstants.EXPIRE_MINUTES);
         EmailSendRequest request = new EmailSendRequest(
@@ -45,6 +45,13 @@ public class VerificationCodeService {
                 html,
                 true);
         return emailClientFacade.send(request);
+    }
+
+    /**
+     * 校验验证码，校验成功后验证码立即失效。
+     */
+    public boolean verify(String email, String code) {
+        return verificationCodeStore.verify(email, code);
     }
 
     private String generateCode() {

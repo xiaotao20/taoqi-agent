@@ -1,6 +1,6 @@
 package com.taoqi.chat.service;
 
-import com.taoqi.chat.cache.VerificationCodeCache;
+import com.taoqi.chat.cache.VerificationCodeStore;
 import com.taoqi.chat.facade.EmailClientFacade;
 import com.taoqi.integration.api.dto.EmailSendRequest;
 import com.taoqi.integration.api.dto.EmailSubmitResult;
@@ -29,7 +29,7 @@ import static org.mockito.Mockito.when;
 class VerificationCodeServiceTest {
 
     @Mock
-    private VerificationCodeCache verificationCodeCache;
+    private VerificationCodeStore verificationCodeStore;
 
     @Mock
     private EmailClientFacade emailClientFacade;
@@ -45,7 +45,7 @@ class VerificationCodeServiceTest {
         EmailSubmitResult result = verificationCodeService.send("user@example.com");
 
         ArgumentCaptor<String> codeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(verificationCodeCache).put(eq("user@example.com"), codeCaptor.capture());
+        verify(verificationCodeStore).put(eq("user@example.com"), codeCaptor.capture());
         String code = codeCaptor.getValue();
         assertThat(code).matches("\\d{6}");
 
@@ -61,5 +61,15 @@ class VerificationCodeServiceTest {
         assertThat(request.content()).contains("taoqi-agent");
 
         assertThat(result.status()).isEqualTo(EmailSendStatus.SENDING);
+    }
+
+    @Test
+    @DisplayName("校验验证码时直接委托给存储")
+    void verifiesThroughStore() {
+        when(verificationCodeStore.verify("user@example.com", "123456")).thenReturn(true);
+
+        assertThat(verificationCodeService.verify("user@example.com", "123456")).isTrue();
+
+        verify(verificationCodeStore).verify("user@example.com", "123456");
     }
 }
