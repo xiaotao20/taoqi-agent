@@ -2,11 +2,11 @@
 -- 应用启动时会自动执行本脚本（CREATE ... IF NOT EXISTS），也可手动执行：
 --   mysql -u root -p < schema.sql
 
-CREATE DATABASE IF NOT EXISTS `taoqi-agent`
+CREATE DATABASE IF NOT EXISTS `taoqi-agent-integration`
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
-USE `taoqi-agent`;
+USE `taoqi-agent-integration`;
 
 CREATE TABLE IF NOT EXISTS `email_send_record` (
     `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',

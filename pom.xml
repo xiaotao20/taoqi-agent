@@ -25,6 +25,8 @@
         <!-- Spring Cloud Alibaba：Nacos 服务注册与发现 -->
         <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
         <mybatis-plus.version>3.5.18</mybatis-plus.version>
+        <!-- RocketMQ Spring Starter：@RocketMQMessageListener 注解式消费，版本独立于 Alibaba BOM -->
+        <rocketmq-spring.version>2.3.4</rocketmq-spring.version>
         <!-- 各服务独立版本号：升级某个服务时只改对应属性，不影响其它服务 -->
         <taoqi-agent-common.version>1.0-SNAPSHOT</taoqi-agent-common.version>
         <taoqi-agent-integration.version>1.0-SNAPSHOT</taoqi-agent-integration.version>
@@ -75,6 +77,12 @@
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-jsqlparser</artifactId>
                 <version>${mybatis-plus.version}</version>
+            </dependency>
+            <!-- RocketMQ Spring Starter：提供 @RocketMQMessageListener 与 RocketMQTemplate -->
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-spring-boot-starter</artifactId>
+                <version>${rocketmq-spring.version}</version>
             </dependency>
             <!-- 项目内部模块：各服务独立版本，使用方引用时不写版本号 -->
             <dependency>

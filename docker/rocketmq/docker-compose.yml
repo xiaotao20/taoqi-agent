@@ -1,0 +1,42 @@
+services:
+  namesrv:
+    image: apache/rocketmq:5.3.2
+    container_name: rocketmq-namesrv
+    restart: unless-stopped
+    ports:
+      - "9876:9876"
+    environment:
+      # 本机开发用较小的堆，避免吃掉太多内存
+      JAVA_OPT_EXT: "-Xms256m -Xmx256m"
+    command: sh mqnamesrv
+
+  broker:
+    image: apache/rocketmq:5.3.2
+    container_name: rocketmq-broker
+    depends_on:
+      - namesrv
+    # namesrv 未就绪时 broker 会退出，交给 Docker 自动重试
+    restart: unless-stopped
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      # dashboard 与 broker 共用网络命名空间；dashboard 实际监听 8082，映射到宿主机 8180
+      - "8180:8082"
+    environment:
+      NAMESRV_ADDR: namesrv:9876
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m"
+    volumes:
+      - ./broker.conf:/home/rocketmq/broker.conf
+    command: sh mqbroker -c /home/rocketmq/broker.conf
+
+  dashboard:
+    image: apacherocketmq/rocketmq-dashboard:latest
+    container_name: rocketmq-dashboard
+    restart: unless-stopped
+    depends_on:
+      - broker
+    # 与 broker 共用网络命名空间：broker 注册的 127.0.0.1:10911 在 dashboard 内即 broker 本身，
+    # 宿主机上的 Java 客户端也继续通过映射端口访问，无需把 brokerIP1 改成局域网 IP
+    network_mode: "service:broker"
+    environment:
+      JAVA_OPTS: "-Drocketmq.namesrv.addr=namesrv:9876"

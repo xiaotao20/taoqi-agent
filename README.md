@@ -19,6 +19,7 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | 持久层 | MyBatis-Plus | 3.5.18（Boot 4 专用 starter） |
 | 分布式缓存 | Redis（验证码、限流） | 7.x |
 | 本地缓存 | Caffeine（验证码内存实现） | 由 Spring Boot BOM 管理 |
+| 消息队列 | RocketMQ（AI 任务异步执行） | client 5.3.1 / spring starter 2.3.4 / broker 5.3.2 |
 | 数据库 | MySQL（本地） | 8.x |
 | 单元测试 | JUnit Jupiter | 6.0.3（由 spring-boot-starter-test 管理） |
 | 断言库 | AssertJ | 3.27.7（由 spring-boot-starter-test 管理） |
@@ -37,8 +38,8 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | └ `taoqi-agent-integration-api` | 接口契约：邮件 Feign 客户端与 DTO，供其它服务直接引入 |
 | └ `taoqi-agent-integration-server` | 服务实现：QQ 邮件发送、发送记录入库、REST 接口，注册到 Nacos，可独立启动 |
 | `taoqi-agent-chat` | 聊天模块聚合模块（pom），下分接口契约与服务实现 |
-| └ `taoqi-agent-chat-api` | 聊天模块的接口契约（暂未定义） |
-| └ `taoqi-agent-chat-server` | 聊天模块的服务实现：通过 Nacos + Feign 调用邮件服务，默认端口 8082 |
+| └ `taoqi-agent-chat-api` | 接口契约：AI 任务 DTO、实体与状态枚举 |
+| └ `taoqi-agent-chat-server` | 服务实现：通过 Nacos + Feign 调用邮件服务，提供验证码与 AI 任务队列（RocketMQ），默认端口 8082 |
 | `taoqi-agent-starter` | 自定义 Spring Boot Starter：引入即自动为 Servlet 应用加上 traceId 与访问日志 |
 
 > 后续将随 Agent 能力演进新增模块（如 Agent 核心运行时、模型接入、工具调用、记忆管理等），新增模块的依赖版本仍由父模块统一管理。
@@ -95,20 +96,25 @@ taoqi-agent
             └── test/java/com/taoqi/integration
 └── taoqi-agent-chat            # 聊天模块（聚合 pom）
     ├── pom.xml
-    ├── taoqi-agent-chat-api    # 接口契约（暂未定义）
-    └── taoqi-agent-chat-server # 服务实现（Feign 调用示例）
+    ├── taoqi-agent-chat-api    # 接口契约（AI 任务 DTO、实体与枚举）
+    └── taoqi-agent-chat-server # 服务实现（Feign / 验证码 / AI 任务队列）
         └── src
             ├── main/java/com/taoqi/chat
             │   ├── ChatApplication.java
             │   ├── cache/          # VerificationCodeStore：验证码 Redis / 内存存储
-            │   ├── config/         # 配置属性
+            │   ├── config/         # 配置属性与 MyBatis-Plus 分页
             │   ├── constant/       # 邮件 HTML 模板与验证码常量
-            │   ├── controller/     # 测试接口、验证码接口
+            │   ├── controller/     # 测试接口、验证码接口、AI 任务接口
             │   ├── dto/            # 请求参数
             │   ├── facade/         # 门面层：封装 Feign 调用
             │   ├── handler/        # 全局异常处理
-            │   └── service/        # 验证码服务
-            ├── main/resources/application.yml
+            │   ├── mapper/         # AgentTaskMapper
+            │   ├── mq/             # AI 任务消息体、派发器与注解消费者
+            │   ├── service/        # 验证码服务、AI 任务服务
+            │   └── task/           # AI 任务执行器与模拟生成器
+            ├── main/resources
+            │   ├── application.yml
+            │   └── db/schema.sql   # chat 库建表脚本
             └── test/java/com/taoqi/chat
 └── taoqi-agent-starter         # 自定义 Starter（自动配置）
     └── src
@@ -125,6 +131,7 @@ taoqi-agent
 
 - JDK 21
 - 无需单独安装 Maven，使用项目自带的 Maven Wrapper 即可
+- AI 任务默认走 RocketMQ；本地未安装时可切换为 `local` 模式，见「AI 任务队列」一节
 
 ## 构建与测试
 
@@ -285,7 +292,7 @@ taoqi:
 
 #### 初始化数据库
 
-默认连接 `jdbc:mysql://localhost:3306/taoqi-agent`，用户名 `root`、密码 `123456`，可通过环境变量 `MYSQL_USERNAME` / `MYSQL_PASSWORD` 覆盖。
+默认连接 `jdbc:mysql://localhost:3306/taoqi-agent-integration`，用户名 `root`、密码 `123456`，可通过环境变量 `MYSQL_USERNAME` / `MYSQL_PASSWORD` 覆盖。
 
 应用启动时会自动执行 `resources/db/schema.sql` 建表（配置为 `spring.sql.init.mode=always`），脚本使用 `CREATE ... IF NOT EXISTS`，可以重复执行；JDBC URL 带了 `createDatabaseIfNotExist=true`，数据库不存在时先由驱动创建。因此首次启动只需保证 MySQL 已运行、账号有建库建表权限，无需手动执行 SQL。
 
@@ -295,7 +302,7 @@ taoqi:
 mysql -u root -p < taoqi-agent-integration/taoqi-agent-integration-server/src/main/resources/db/schema.sql
 ```
 
-脚本会用 `utf8mb4` 创建数据库 `taoqi-agent` 和表 `email_send_record`，并为创建时间、成功状态、收件人建立索引。
+脚本会用 `utf8mb4` 创建数据库 `taoqi-agent-integration` 和表 `email_send_record`，并为创建时间、成功状态、收件人建立索引。
 
 #### 数据模型
 
@@ -426,6 +433,94 @@ curl -X POST http://localhost:8082/api/chat/verification-code/verify \
 - 单实例或测试环境可通过 `taoqi.chat.verification-code.store-type=memory` 切到 Caffeine 内存实现（环境变量 `VERIFICATION_CODE_STORE_TYPE`）；
 - Redis 不可用时发码接口直接失败（fail-closed），不会发出一封无法校验的邮件；
 - 校验失败的 HTTP 状态码仍是 200，业务结果看 `R.code`；参数格式错误由全局异常处理返回 HTTP 400。
+
+### AI 任务队列（RocketMQ）
+
+在验证码链路之外新增的一条异步链路，原邮件与验证码接口不受影响：
+
+```
+POST /api/chat/agent-task → 落库 PENDING → 发送 RocketMQ 消息
+                                              ↓
+                         消费者 → 置 RUNNING → 生成结果 → SUCCESS / FAILED
+                                              ↓
+                              失败返回 RECONSUME_LATER，RocketMQ 按延迟重投
+                                              ↓
+                          重投耗尽 → %DLQ%<consumer-group> → 死信消费者落库
+                                              ↓
+                                   控制台人工重放 → 新建任务重新入队
+```
+
+- 消费端使用 `@RocketMQMessageListener`（`rocketmq-spring-boot-starter`）声明消费组和主题，生产端使用 starter 自动装配的 `RocketMQTemplate`；
+- 任务记录保存在独立的 `taoqi-agent-chat` 库的 `agent_task` 表，启动时自动建表；
+- 消息体只携带任务主键，消费端按主键读库，避免大文本进入队列；
+- 状态更新使用条件更新（`where id = ? and status = ?`），重复消费不会重复执行；
+- 失败时先落 `FAILED` 并累加 `retry_count`，再把异常抛给 starter，由 RocketMQ 重投；注解中 `maxReconsumeTimes = 5`，超限后进入死信队列；
+- 死信由 `AgentTaskDeadLetterConsumer` 消费并落库，原任务推进到 `DEAD` 终态，避免停留在可重试的 `FAILED`；
+- 当前使用 `MockAiTextGenerator` 模拟模型调用，接入真实模型时只需替换该类。
+
+#### 死信处理
+
+重投耗尽后的消息进入 `%DLQ%<consumer-group>`，死信消费者订阅该主题并做三件事：
+
+- 把消息写入 `agent_task_dead_letter` 表：保存 msgId、原任务、消息体、重投次数和失败原因；`msg_id` 唯一索引保证重复投递只记录一次；
+- 把原任务状态推进到 `DEAD`（已是 `SUCCESS` 的不降级）；消息体无法解析或原任务不存在时只留档，状态记为 `IGNORED`；
+- 记录 ERROR 日志，生产环境可基于该日志或 Dashboard 的 DLQMessage 页面配置告警。
+
+人工重放采用**新建任务**的方式：以原任务的类型和输入创建一条新任务并重新入队，原任务保留在 `DEAD` 作为历史，死信记录写入 `replayed_task_id`。这样旧的死信消息不会影响重放后的任务，重放次数也有完整记录。死信状态用条件更新从 `PENDING` 抢占为 `REPLAYING`，重复重放会返回业务码 409。
+
+接口：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/chat/agent-task` | 提交任务，每分钟最多 10 次；返回 `PENDING` 任务 |
+| GET | `/api/chat/agent-task/{id}` | 查询单个任务 |
+| GET | `/api/chat/agent-task?current=1&size=10` | 分页查询，最新在前，`size` 最大 50 |
+| GET | `/api/chat/agent-task/dead-letter?current=1&size=10` | 分页查询死信记录，最新在前，`size` 最大 50 |
+| POST | `/api/chat/agent-task/dead-letter/{id}/replay` | 人工重放，每分钟最多 5 次；返回新建的任务 |
+
+```bash
+curl -X POST http://localhost:8082/api/chat/agent-task \
+  -H "Content-Type: application/json" \
+  -d '{"taskType":"COPYWRITING","input":"为新的 AI 任务队列写一句宣传语"}'
+```
+
+`taskType` 支持 `SUMMARY`（文本总结）、`COPYWRITING`（文案生成，默认）、`IDEA`（头脑风暴）。
+输入中包含「模拟失败」时会主动抛出异常，可用来观察 MQ 重投和最终的死信队列。
+
+#### 本地启动 RocketMQ
+
+项目提供了 Docker Compose 配置 `docker/rocketmq/`：
+
+```bash
+docker compose -f docker/rocketmq/docker-compose.yml up -d
+```
+
+启动后控制台地址为 `http://localhost:8180`（dashboard 容器内部监听 8082，映射到宿主机 8180，避免和 Nacos 控制台的 8080 冲突）。在 Dashboard 的 Topic 页面可以选到 `taoqi-chat-agent-task`，Consumer 页面能看到 `taoqi-agent-chat-agent-task-consumer` 的消费进度，DLQMessage 页面可查看死信消息。
+
+`broker.conf` 中的 `brokerIP1=127.0.0.1` 不能省略：broker 默认注册容器内网 IP，
+宿主机上的 Java 客户端会连不上。dashboard 与 broker 共用网络命名空间（`network_mode: service:broker`），
+因此 dashboard 内看到的 `127.0.0.1:10911` 就是 broker 本身，不需要把 `brokerIP1` 改成局域网 IP，
+宿主机上的 chat 服务也能继续用 `127.0.0.1` 访问。若镜像拉取失败，也可以从 Apache 官网下载
+`rocketmq-all-5.3.2-bin-release.zip`，用 `mqnamesrv` / `mqbroker` 直接在本机启动，
+效果相同，只是没有 Web 控制台。
+
+#### 配置项
+
+| 配置项 | 环境变量 | 默认值 | 说明 |
+|---|---|---|---|
+| `taoqi.chat.agent-task.dispatch-mode` | `AGENT_TASK_DISPATCH_MODE` | `mq` | `mq` 走 RocketMQ；`local` 走本机线程池，不需要 MQ |
+| `rocketmq.name-server` | `ROCKETMQ_NAME_SERVER` | `127.0.0.1:9876` | RocketMQ 名字服务地址 |
+| `rocketmq.producer.group` | `ROCKETMQ_AGENT_TASK_PRODUCER_GROUP` | `taoqi-agent-chat-agent-task-producer` | 生产者组 |
+| `taoqi.chat.agent-task.topic` | `ROCKETMQ_AGENT_TASK_TOPIC` | `taoqi-chat-agent-task` | 任务主题 |
+| `taoqi.chat.agent-task.consumer-group` | `ROCKETMQ_AGENT_TASK_CONSUMER_GROUP` | `taoqi-agent-chat-agent-task-consumer` | 消费者组 |
+| `taoqi.chat.agent-task.simulate-delay-millis` | `AGENT_TASK_SIMULATE_DELAY_MILLIS` | `3000` | 模拟模型耗时（毫秒） |
+
+死信主题和死信消费组由消费者组派生：`%DLQ%<consumer-group>` 和 `<consumer-group>-dlq-consumer`，修改消费组时两者同步变化，不需要额外配置。
+
+重投次数写在 `@RocketMQMessageListener` 的 `maxReconsumeTimes` 属性里（当前为 5），注解属性不支持占位符，需要调整时直接改常量并注释说明。
+
+本地没有 RocketMQ 时，可以用 `dispatch-mode=local` 启动，任务改由本机线程池执行，
+行为与 MQ 模式一致，只是消息不落盘、进程重启会丢失在途任务；单元测试默认使用该模式。
 
 ## 自定义 Starter：taoqi-agent-starter
 
@@ -618,6 +713,9 @@ R<Void> failed = R.fail("参数错误");
 
 ## 后续待办
 
+- [ ] **接入真实模型**：把 `MockAiTextGenerator` 替换为模型调用，补充超时、重试与限流；任务状态机与 MQ 链路无需改动。
+- [ ] **死信告警与批量处理**：把 DLQ 深度/死信表数量接入 Prometheus 或日志告警，补充批量重放与忽略操作；当前已支持死信落库、`DEAD` 终态、控制台查看与单条重放。
+- [ ] **重放超时回收**：重放先把死信从 `PENDING` 抢占为 `REPLAYING`，若进程在这两步之间异常退出，记录会停在 `REPLAYING`；生产环境可加定时任务把超时记录恢复为 `PENDING`。
 - [ ] **接入 Spring Cloud Gateway**（模块名 `taoqi-agent-gateway`）：新增网关服务，按 `/api/chat/**` → `lb://taoqi-agent-chat`、`/api/integration/**` → `lb://taoqi-agent-integration` 配置路由，由 Nacos 服务发现 + LoadBalancer 自动选择实例。
   - 接入后 nginx 不再维护静态 upstream 列表，只保留静态资源与 TLS 终止；服务扩缩容不需要修改 nginx 配置。
   - 网关自身需要注册到 Nacos，并引入 `spring-cloud-starter-gateway`、`spring-cloud-starter-alibaba-nacos-discovery`、`spring-cloud-starter-loadbalancer`。

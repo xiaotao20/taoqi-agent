@@ -11,6 +11,24 @@ spring:
         enabled: false
         import-check:
           enabled: false
+  datasource:
+    # 上下文测试使用 H2 内存库，避免依赖本地 MySQL
+    url: jdbc:h2:mem:taoqi-chat;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  sql:
+    init:
+      # 单元测试不建表，涉及数据库的行为由 Mock 覆盖
+      mode: never
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
 
 taoqi:
   chat:
@@ -18,6 +36,10 @@ taoqi:
     verification-code:
       # 测试使用内存存储，不依赖 Redis
       store-type: memory
+    agent-task:
+      # 测试使用本地线程池，不连接 RocketMQ
+      dispatch-mode: local
+      simulate-delay-millis: 0
   rate-limit:
     # 测试使用内存限流，不依赖 Redis
     store-type: memory

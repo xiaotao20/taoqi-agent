@@ -38,9 +38,9 @@ spring:
           timeout: 5000
           writetimeout: 5000
   datasource:
-    # 本地 MySQL 默认端口 3306，数据库名 taoqi-agent，建表脚本见 resources/db/schema.sql
+    # 本地 MySQL 默认端口 3306，数据库名 taoqi-agent-integration，建表脚本见 resources/db/schema.sql
     # createDatabaseIfNotExist：数据库不存在时由驱动自动创建，再执行下面的建表脚本
-    url: jdbc:mysql://localhost:3306/taoqi-agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    url: jdbc:mysql://localhost:3306/taoqi-agent-integration?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: ${MYSQL_USERNAME:root}
     password: "${MYSQL_PASSWORD:123456}"
     driver-class-name: com.mysql.cj.jdbc.Driver

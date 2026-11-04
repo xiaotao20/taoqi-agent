@@ -11,7 +11,7 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 | `taoqi-agent` | 父模块，统一管理依赖版本、插件版本与构建配置 |
 | `taoqi-agent-common` | 公共能力：`@RateLimit` 限流注解、`R` 统一返回结果、通用工具类 |
 | `taoqi-agent-integration` | 第三方服务接入（聚合模块），下分 `-api` 与 `-server` |
-| `taoqi-agent-chat` | 聊天服务（聚合模块），下分 `-api` 与 `-server` |
+| `taoqi-agent-chat` | 聊天服务（聚合模块），下分 `-api` 与 `-server`；含验证码与 AI 异步任务（RocketMQ） |
 | `taoqi-agent-starter` | 自定义 Spring Boot Starter：请求 traceId 与访问日志 |
 
 常用命令：
@@ -88,7 +88,21 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 
 - 耗时的外部调用（SMTP、短信等）采用异步：接口先落一条 `SENDING` 状态的记录并立即返回，业务层发布事件（如 `EmailSendEvent`），监听器用 `@Async` + `@EventListener` 在自定义 `ThreadPoolTaskExecutor` 中调用执行组件；完成后把状态更新为 `SUCCESS` / `FAILED` 并写入完成时间。
 - 状态用枚举定义（如 `EmailSendStatus`），数据库以枚举名存储。
-- 线程池要有界并配置拒绝策略（`CallerRunsPolicy`），关闭时等待在途任务完成；内存队列不保证进程重启后任务不丢。当前阶段暂不引入 outbox、消息队列或定时补偿任务，需要更强保证时再演进。
+- 线程池要有界并配置拒绝策略（`CallerRunsPolicy`），关闭时等待在途任务完成；内存队列不保证进程重启后任务不丢。需要跨进程可靠投递的任务（如 AI 任务队列）走 RocketMQ。
+- 当前阶段暂不引入 outbox、消息队列或定时补偿任务，需要更强保证时再演进。邮件发送仍保留事件 + 线程池；AI 任务已使用 RocketMQ，作为 MQ 接入的示范链路。
+
+### 消息队列
+
+- 消费者使用 `@RocketMQMessageListener`（`rocketmq-spring-boot-starter`，版本在根 pom 单独管理），生产端使用 starter 自动装配的 `RocketMQTemplate`；不要用 Spring Cloud Stream binder 承担需要重投的消费逻辑——其错误通道会吞掉消费者异常，消息仍被 ack。starter 2.3.4 已在 Spring Boot 4.1.2 验证可用。
+- `onMessage` 抛出异常即触发 RocketMQ 重投；`maxReconsumeTimes` 是注解常量，不支持属性占位符，调整时同步修改注释。
+- 新增 MQ 链路时提供 `dispatch-mode` 开关：`mq` 走 RocketMQ，`local` 走本机线程池（单元测试与本地无 MQ 时使用），通过 `@ConditionalOnProperty` 装配生产者/消费者。
+- 消息体只携带业务主键（如 `taskId`），消费端按主键读库；不要把大文本、完整 DTO 塞进消息。
+- 消费端必须幂等：用 `where id = ? and status = ?` 条件更新推进状态，重复消费或并发消费时只有一次能成功。
+- 消费失败时先落 `FAILED` 并累加失败次数，再抛出异常交给 MQ 重投；超过 `maxReconsumeTimes` 后进入死信队列。
+- 死信消费者订阅 `%DLQ%<consumer-group>`，把死信落入 `agent_task_dead_letter`（`msg_id` 唯一索引保证幂等），任务推进到 `DEAD` 终态；`SUCCESS` 不降级，无法解析的消息记为 `IGNORED`。
+- 人工重放采用“新建任务”的方式，原任务保留 `DEAD` 作为历史；死信状态用 `PENDING → REPLAYING` 条件更新抢占，防止并发重复重放。
+- traceId 放在消息用户属性（`traceId`）中透传，消费端写回 MDC，异步日志才能串起原请求。
+- MQ 地址与生产者组写在 `rocketmq.name-server`、`rocketmq.producer.group`，topic 与消费组写在 `taoqi.chat.agent-task.*`，全部用环境变量覆盖；不要只放 Nacos，避免其它开发者不知道需要哪些变量。
 
 ### 自定义 Starter
 
@@ -101,11 +115,13 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 | 服务 | 端口 | 说明 |
 |---|---|---|
 | Nacos（单机） | 8848、9848-9849；控制台 8080 | 服务注册、发现与配置中心，内嵌 Derby，不需要外部数据库 |
-| `taoqi-agent-integration-server` | 8081 | 邮件服务，依赖本地 MySQL 3306 的 `taoqi-agent` 库 |
-| `taoqi-agent-chat-server` | 8082 | 通过 Nacos + Feign 调用邮件服务 |
+| RocketMQ | nameserver 9876、broker 10909/10911、dashboard 8180 | AI 任务队列；本地可用 `docker/rocketmq` 一键启动，无需 RocketMQ 时把 `AGENT_TASK_DISPATCH_MODE` 设为 `local` |
+| `taoqi-agent-integration-server` | 8081 | 邮件服务，依赖本地 MySQL 3306 的 `taoqi-agent-integration` 库 |
+| `taoqi-agent-chat-server` | 8082 | 通过 Nacos + Feign 调用邮件服务；AI 任务使用 MySQL 的 `taoqi-agent-chat` 库 |
 
 - Nacos 默认地址 `localhost:8848`，启动方式见 README；两个服务启动后可在控制台「服务管理 → 服务列表」看到 `taoqi-agent-integration` 和 `taoqi-agent-chat`。
 
 - 数据库连接默认 `root` / 环境变量 `MYSQL_USERNAME`、`MYSQL_PASSWORD`；启动时会自动执行 `resources/db/schema.sql`（`CREATE ... IF NOT EXISTS`），JDBC URL 带 `createDatabaseIfNotExist=true`。
+- 各服务使用独立数据库：integration 为 `taoqi-agent-integration`，chat 为 `taoqi-agent-chat`，避免表与生命周期耦合。
 - 单元测试不依赖本地 MySQL，integration-server 的测试用 H2 内存库（`src/test/resources/application.yml` 与 `schema.sql`）。
 - 邮件 SMTP 授权码等敏感信息请通过环境变量注入（`QQ_MAIL_USERNAME`、`QQ_MAIL_AUTH_CODE`），不要提交到仓库。

@@ -13,7 +13,24 @@
     <artifactId>taoqi-agent-chat-api</artifactId>
     <packaging>jar</packaging>
 
-    <description>聊天模块的接口定义：对外接口与 DTO（暂未定义）</description>
+    <description>聊天模块的接口定义：对外接口、DTO 与实体，供其它服务直接引入</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+        <!-- 实体使用 @TableName / @TableId 注解，仅引入注解模块，不引入整个 ORM -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-annotation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
     <build>
         <resources>
