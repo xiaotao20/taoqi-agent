@@ -18,6 +18,6 @@ public interface EmailApi {
     /**
      * 提交邮件发送任务：立即返回记录 ID 与状态，实际发送异步完成。
      */
-    @PostMapping("/api/email/send")
+    @PostMapping("/api/integration/email/send")
     R<EmailSubmitResult> send(@Valid @RequestBody EmailSendRequest request);
 }

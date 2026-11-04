@@ -22,6 +22,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>4.1.2</spring-boot.version>
         <spring-cloud.version>2025.1.4</spring-cloud.version>
+        <!-- Spring Cloud Alibaba：Nacos 服务注册与发现 -->
+        <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
         <mybatis-plus.version>3.5.18</mybatis-plus.version>
         <!-- 各服务独立版本号：升级某个服务时只改对应属性，不影响其它服务 -->
         <taoqi-agent-common.version>1.0-SNAPSHOT</taoqi-agent-common.version>
@@ -45,6 +47,14 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud Alibaba BOM：放在 Spring Cloud BOM 之后，公共组件版本以 Spring Cloud 为准 -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

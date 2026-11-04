@@ -50,9 +50,9 @@ public class EmailSendTask {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
-            String from = mailProperties.from();
-            if (StringUtils.hasText(mailProperties.personal())) {
-                helper.setFrom(new InternetAddress(from, mailProperties.personal(), StandardCharsets.UTF_8.name()));
+            String from = mailProperties.getFrom();
+            if (StringUtils.hasText(mailProperties.getPersonal())) {
+                helper.setFrom(new InternetAddress(from, mailProperties.getPersonal(), StandardCharsets.UTF_8.name()));
             } else {
                 helper.setFrom(from);
             }

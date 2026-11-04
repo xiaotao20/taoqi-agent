@@ -25,6 +25,6 @@ class EmailFeignClientTest {
         assertThat(metadata).hasSize(1);
         MethodMetadata send = metadata.get(0);
         assertThat(send.template().method()).isEqualTo("POST");
-        assertThat(send.template().url()).isEqualTo("/api/email/send");
+        assertThat(send.template().url()).isEqualTo("/api/integration/email/send");
     }
 }

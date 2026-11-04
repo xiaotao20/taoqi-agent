@@ -37,6 +37,16 @@
             <groupId>com.taoqi</groupId>
             <artifactId>taoqi-agent-common</artifactId>
         </dependency>
+        <!-- Nacos 服务注册：启动时把本服务注册到 Nacos，供其它服务发现 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- Nacos 配置中心：通过 spring.config.import 加载远端配置 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
         <!-- MyBatis-Plus：邮件发送记录持久化 -->
         <dependency>
             <groupId>com.baomidou</groupId>

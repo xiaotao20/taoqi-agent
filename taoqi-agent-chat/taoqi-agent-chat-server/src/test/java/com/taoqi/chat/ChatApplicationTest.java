@@ -9,7 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * @author xiaotao
  * @date 2026-11-03
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.cloud.nacos.discovery.enabled=false")
 class ChatApplicationTest {
 
     @Test

@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 2025.1.4（OpenFeign），MyBatis-Plus 3.5.18，MySQL 8。构建使用项目自带的 Maven Wrapper（`./mvnw`），依赖通过项目根目录的 `settings.xml`（阿里云镜像）下载。
+Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 2025.1.4（OpenFeign），Spring Cloud Alibaba 2025.1.0.0（Nacos 3.1.1），MyBatis-Plus 3.5.18，MySQL 8。构建使用项目自带的 Maven Wrapper（`./mvnw`），依赖通过项目根目录的 `settings.xml`（阿里云镜像）下载。
 
 | 模块 | 说明 |
 |---|---|
@@ -42,6 +42,15 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 - 单元测试用 `@ExtendWith(MockitoExtension.class)` + `@Mock` + `@InjectMocks` 适配字段注入。
 - 不涉及依赖注入的初始化（如构建 Caffeine 缓存）可以保留构造器。
 
+### Nacos 服务发现与配置中心
+
+- 服务以 `spring.application.name` 为服务名注册到 Nacos；Feign 客户端的 `@FeignClient(name = ...)` 必须与目标服务的 `spring.application.name` 一致，不要再写 `url` 固定地址。
+- 消费方同时引入 `spring-cloud-starter-alibaba-nacos-discovery` 和 `spring-cloud-starter-loadbalancer`：前者负责注册与发现，后者负责从实例列表中选择实例。
+- 本地开发默认注册 `127.0.0.1`（`spring.cloud.nacos.discovery.ip`），避免多网卡或 IPv6 注册到不可达地址；部署环境用 `NACOS_REGISTER_IP` 覆盖。Nacos 地址、命名空间、分组分别用 `NACOS_ADDR`、`NACOS_NAMESPACE`、`NACOS_GROUP` 覆盖。
+- 配置中心 Data ID 使用 `${spring.application.name}.yml`，Group 默认 `DEFAULT_GROUP`，通过 `spring.config.import: optional:nacos:...` 加载；Nacos 配置优先级高于本地 `application.yml`。
+- 需要动态刷新的 `@ConfigurationProperties` 使用可变类 + `@RefreshScope`：CGLIB 作用域代理无法继承 final 的 record；线程池等启动期资源不做动态刷新，修改后需要重启。
+- 单元测试/上下文测试同时关闭注册和远端配置：`spring.cloud.nacos.discovery.enabled=false`、`spring.cloud.nacos.config.enabled=false`、`spring.cloud.nacos.config.import-check.enabled=false`。
+
 ### 代码风格
 
 - 每个 Java 类（含测试类）都要有类级 Javadoc：一句话说明职责，并带 `@author xiaotao` 和 `@date yyyy-MM-dd`。
@@ -50,6 +59,7 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 
 ### 接口返回
 
+- HTTP 路径按服务划分前缀：`/api/chat/**`、`/api/integration/**`，再按业务分组（如 `/api/integration/email/**`）。不要用具体业务作为根路径（如 `/api/email`），同一服务后续接入更多能力时无需再调整网关和反向代理。
 - 所有 HTTP 接口与 Feign 契约的响应体统一使用 `com.taoqi.common.result.R<T>`，字段为 `code`、`message`、`data`、`success`。
 - 常用静态方法：`R.data(data)`、`R.list(list)`、`R.ok()`、`R.fail(message)`、`R.fail(code, message)`、`R.of(...)`。
 - 分页接口直接使用 `R<IPage<T>>`，把 MyBatis-Plus 的分页对象原样作为 `data`，不要另建分页 DTO。
@@ -72,7 +82,7 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 
 - `@RateLimit` 默认走内存存储，只对单实例有效；多实例通过 `taoqi.rate-limit.store-type=redis` 切换为 Redis 共享计数，需要运行期引入 `spring-boot-starter-data-redis`。
 - Redis 实现用 Lua 原子完成自增、设置过期和读取 TTL；Redis 不可用时 fail-open 放行，避免拖垮业务。
-- 验证码等本地缓存同样是单实例语义，多实例部署时要一起换成 Redis。
+- 验证码默认存 Redis（`taoqi.chat.verification-code.store-type=redis`），多实例共享；`memory` 实现基于 Caffeine，仅用于单实例或测试。Redis 校验用 Lua 脚本原子比较并删除，只有验证成功才失效；Redis 不可用时发码接口 fail-closed。
 
 ### 异步任务
 
@@ -90,8 +100,11 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 
 | 服务 | 端口 | 说明 |
 |---|---|---|
+| Nacos（单机） | 8848、9848-9849；控制台 8080 | 服务注册、发现与配置中心，内嵌 Derby，不需要外部数据库 |
 | `taoqi-agent-integration-server` | 8081 | 邮件服务，依赖本地 MySQL 3306 的 `taoqi-agent` 库 |
-| `taoqi-agent-chat-server` | 8082 | 通过 Feign 调用邮件服务 |
+| `taoqi-agent-chat-server` | 8082 | 通过 Nacos + Feign 调用邮件服务 |
+
+- Nacos 默认地址 `localhost:8848`，启动方式见 README；两个服务启动后可在控制台「服务管理 → 服务列表」看到 `taoqi-agent-integration` 和 `taoqi-agent-chat`。
 
 - 数据库连接默认 `root` / 环境变量 `MYSQL_USERNAME`、`MYSQL_PASSWORD`；启动时会自动执行 `resources/db/schema.sql`（`CREATE ... IF NOT EXISTS`），JDBC URL 带 `createDatabaseIfNotExist=true`。
 - 单元测试不依赖本地 MySQL，integration-server 的测试用 H2 内存库（`src/test/resources/application.yml` 与 `schema.sql`）。

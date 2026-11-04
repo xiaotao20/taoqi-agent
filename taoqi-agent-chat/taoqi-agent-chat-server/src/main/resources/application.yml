@@ -4,6 +4,21 @@ server:
 spring:
   application:
     name: taoqi-agent-chat
+  config:
+    # 加载 Nacos 中的 taoqi-agent-chat.yml；optional 允许 Nacos 不可用时仍能启动
+    import: optional:nacos:${spring.application.name}.yml?group=${NACOS_GROUP:DEFAULT_GROUP}&refreshEnabled=true
+  cloud:
+    nacos:
+      # Nacos 服务端地址，部署环境通过环境变量 NACOS_ADDR 覆盖
+      server-addr: ${NACOS_ADDR:localhost:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+      discovery:
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        namespace: ${NACOS_NAMESPACE:}
+        # 本机多网卡或 IPv6 时固定注册回环地址，Feign 按服务名调用时可达
+        ip: ${NACOS_REGISTER_IP:127.0.0.1}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -23,6 +38,6 @@ taoqi:
   chat:
     # 测试接口的默认收件人地址
     test-email-to: ${CHAT_TEST_EMAIL_TO:1377417617@qq.com}
-  integration:
-    # 邮件服务地址，Feign 客户端通过该配置调用
-    base-url: http://localhost:8081
+    verification-code:
+      # redis：多实例共享验证码；memory：单实例内存，本地无 Redis 时使用
+      store-type: ${VERIFICATION_CODE_STORE_TYPE:redis}

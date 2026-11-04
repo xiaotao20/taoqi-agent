@@ -14,9 +14,11 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | 构建工具 | Maven（随项目提供 Maven Wrapper） | 3.9.11 |
 | 基础框架 | Spring Boot | 4.1.2 |
 | 服务通信 | Spring Cloud（OpenFeign） | 2025.1.4（OpenFeign 5.0.4） |
+| 服务注册与配置中心 | Spring Cloud Alibaba / Nacos | 2025.1.0.0 / 3.1.1 |
 | 邮件发送 | Spring Boot Mail（SMTP） | 由 spring-boot-starter-mail 管理 |
 | 持久层 | MyBatis-Plus | 3.5.18（Boot 4 专用 starter） |
-| 本地缓存 | Caffeine | 由 Spring Boot BOM 管理 |
+| 分布式缓存 | Redis（验证码、限流） | 7.x |
+| 本地缓存 | Caffeine（验证码内存实现） | 由 Spring Boot BOM 管理 |
 | 数据库 | MySQL（本地） | 8.x |
 | 单元测试 | JUnit Jupiter | 6.0.3（由 spring-boot-starter-test 管理） |
 | 断言库 | AssertJ | 3.27.7（由 spring-boot-starter-test 管理） |
@@ -33,10 +35,10 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | `taoqi-agent-common` | 公共模块：通用工具类、`@RateLimit` 限流注解等通用能力 |
 | `taoqi-agent-integration` | 第三方服务接入聚合模块（pom），下分接口契约与服务实现 |
 | └ `taoqi-agent-integration-api` | 接口契约：邮件 Feign 客户端与 DTO，供其它服务直接引入 |
-| └ `taoqi-agent-integration-server` | 服务实现：QQ 邮件发送、发送记录入库、REST 接口，可独立启动 |
+| └ `taoqi-agent-integration-server` | 服务实现：QQ 邮件发送、发送记录入库、REST 接口，注册到 Nacos，可独立启动 |
 | `taoqi-agent-chat` | 聊天模块聚合模块（pom），下分接口契约与服务实现 |
 | └ `taoqi-agent-chat-api` | 聊天模块的接口契约（暂未定义） |
-| └ `taoqi-agent-chat-server` | 聊天模块的服务实现：通过 Feign 调用邮件服务的测试接口，默认端口 8082 |
+| └ `taoqi-agent-chat-server` | 聊天模块的服务实现：通过 Nacos + Feign 调用邮件服务，默认端口 8082 |
 | `taoqi-agent-starter` | 自定义 Spring Boot Starter：引入即自动为 Servlet 应用加上 traceId 与访问日志 |
 
 > 后续将随 Agent 能力演进新增模块（如 Agent 核心运行时、模型接入、工具调用、记忆管理等），新增模块的依赖版本仍由父模块统一管理。
@@ -98,7 +100,7 @@ taoqi-agent
         └── src
             ├── main/java/com/taoqi/chat
             │   ├── ChatApplication.java
-            │   ├── cache/          # VerificationCodeCache 验证码本地缓存
+            │   ├── cache/          # VerificationCodeStore：验证码 Redis / 内存存储
             │   ├── config/         # 配置属性
             │   ├── constant/       # 邮件 HTML 模板与验证码常量
             │   ├── controller/     # 测试接口、验证码接口
@@ -171,7 +173,7 @@ java -jar taoqi-agent-integration/taoqi-agent-integration-server/target/taoqi-ag
 ### REST 接口
 
 ```bash
-curl -X POST http://localhost:8081/api/email/send \
+curl -X POST http://localhost:8081/api/integration/email/send \
   -H "Content-Type: application/json" \
   -d '{
         "to": ["someone@example.com"],
@@ -192,7 +194,7 @@ curl -X POST http://localhost:8081/api/email/send \
 }
 ```
 
-发送结果通过 `GET /api/email/records/{id}` 查询，状态会更新为 `SUCCESS` 或 `FAILED`。
+发送结果通过 `GET /api/integration/email/records/{id}` 查询，状态会更新为 `SUCCESS` 或 `FAILED`。
 
 ### Feign 客户端
 
@@ -211,7 +213,69 @@ R<EmailSubmitResult> result = emailFeignClient.send(request);
 EmailSubmitResult data = result.data();   // recordId + status + message
 ```
 
-目标地址由 `taoqi.integration.base-url` 配置（默认 `http://localhost:8081`）。
+邮件服务启动后会以 `spring.application.name`（`taoqi-agent-integration`）为服务名注册到 Nacos。Feign 客户端不再配置固定 URL，`@FeignClient(name = "taoqi-agent-integration")` 由 Nacos 返回实例列表，再由 Spring Cloud LoadBalancer 选择具体实例。聊天服务因此额外引入了 `spring-cloud-starter-loadbalancer`。
+
+#### 本地 Nacos
+
+两个服务默认连接 `localhost:8848` 的 Nacos 3.x。用 Docker 启动单机模式：
+
+```bash
+docker run -d --name nacos \
+  -e MODE=standalone \
+  -e NACOS_AUTH_ENABLE=false \
+  -e NACOS_AUTH_CONSOLE_ENABLE=false \
+  -e NACOS_AUTH_TOKEN="$(printf '%s' 'taoqi-agent-nacos-dev-token-2026-0123456789' | base64)" \
+  -p 8080:8080 -p 8848:8848 -p 9848:9848 -p 9849:9849 \
+  -v nacos-data:/home/nacos/data \
+  nacos/nacos-server:v3.1.1
+```
+
+- 控制台 `http://localhost:8080`，服务列表在「服务管理 → 服务列表」；
+- 单机模式使用内嵌 Derby，数据保存在 `nacos-data` 卷，不需要外部数据库；
+- 应用默认把 `127.0.0.1` 作为注册地址，部署到其它机器时用环境变量 `NACOS_REGISTER_IP` 指定其它服务可达的地址；
+- Nacos 地址、命名空间、分组可通过 `NACOS_ADDR`、`NACOS_NAMESPACE`、`NACOS_GROUP` 覆盖。
+
+#### 配置中心
+
+两个服务通过 `spring.config.import` 加载与 `spring.application.name` 同名的 YAML：
+
+```yaml
+spring:
+  config:
+    import: optional:nacos:${spring.application.name}.yml?group=${NACOS_GROUP:DEFAULT_GROUP}&refreshEnabled=true
+```
+
+在控制台「配置管理 → 配置列表」创建两个配置，Group 都选 `DEFAULT_GROUP`：
+
+| Data ID | 说明 |
+|---|---|
+| `taoqi-agent-chat.yml` | 聊天服务配置 |
+| `taoqi-agent-integration.yml` | 邮件服务配置 |
+
+示例内容：
+
+```yaml
+# taoqi-agent-chat.yml
+taoqi:
+  chat:
+    test-email-to: 1377417617@qq.com
+```
+
+```yaml
+# taoqi-agent-integration.yml
+taoqi:
+  mail:
+    personal: ChatGPT
+```
+
+规则：
+
+- Nacos 配置的优先级高于本地 `application.yml`，同名配置项以 Nacos 为准；
+- `optional:` 表示 Nacos 不可用或配置不存在时仍能启动，自动回退到本地配置；
+- `refreshEnabled=true` 开启变更监听，需要动态刷新的 `@ConfigurationProperties`（如 `ChatProperties`、`MailProperties`）额外加了 `@RefreshScope`，修改后无需重启即可生效；
+- `record` 是 final 类，无法被 Spring Cloud 的 CGLIB 作用域代理继承，所以这两个需要动态刷新的配置类使用可变类 + getter/setter；
+- 线程池这类启动期创建的资源不会因配置变更而重建，修改后仍需重启；
+- 单元测试通过 `spring.cloud.nacos.config.enabled=false` 和 `import-check.enabled=false` 关闭远端配置。
 
 > 授权码属于敏感信息，生产环境请通过环境变量或配置中心注入，不要提交到代码仓库。
 
@@ -270,16 +334,16 @@ mysql -u root -p < taoqi-agent-integration/taoqi-agent-integration-server/src/ma
 
 ```bash
 # 分页查询，返回 R<IPage<EmailSendRecordEntity>>，支持 to、subject、status、startTime、endTime、page、size
-curl "http://localhost:8081/api/email/records?to=1377417617@qq.com&status=SUCCESS&page=1&size=10"
+curl "http://localhost:8081/api/integration/email/records?to=1377417617@qq.com&status=SUCCESS&page=1&size=10"
 
 # 按主键查询单条记录（MyBatis-Plus getById）
-curl "http://localhost:8081/api/email/records/1"
+curl "http://localhost:8081/api/integration/email/records/1"
 
 # 最近 7 天每日统计
-curl "http://localhost:8081/api/email/records/daily-stats?days=7"
+curl "http://localhost:8081/api/integration/email/records/daily-stats?days=7"
 
 # 收件人 Top 5
-curl "http://localhost:8081/api/email/records/top-recipients?limit=5"
+curl "http://localhost:8081/api/integration/email/records/top-recipients?limit=5"
 ```
 
 > 单元测试使用 H2 内存库验证实体映射与基础 CRUD；复杂 SQL 依赖 MySQL 8 的递归 CTE 与字符串函数，需要在本地数据库上验证。
@@ -289,9 +353,9 @@ curl "http://localhost:8081/api/email/records/top-recipients?limit=5"
 `taoqi-agent-chat` 与 `taoqi-agent-common` 平级，同样按“聚合模块 + 接口/实现分离”组织：
 
 - `taoqi-agent-chat-api`：聊天模块的接口契约（暂未定义，先保留模块结构）
-- `taoqi-agent-chat-server`：聊天模块的服务实现，目前提供一个通过 Feign 调用邮件服务的测试接口，默认端口 8082
+- `taoqi-agent-chat-server`：聊天模块的服务实现，注册到 Nacos，通过 Feign 调用邮件服务，默认端口 8082
 
-调用链：`ChatController` → `EmailClientFacade` → `EmailFeignClient` → 邮件服务。
+调用链：`ChatController` → `EmailClientFacade` → `EmailFeignClient` → Nacos 服务发现 → 邮件服务。
 
 Facade 按被调用的服务命名（邮件服务对应 `EmailClientFacade`），职责是拆包 client 返回的 `R`，向上只暴露业务数据；controller 再统一用 `R` 包装响应。
 
@@ -299,7 +363,7 @@ Facade 按被调用的服务命名（邮件服务对应 `EmailClientFacade`）�
 
 ### Feign 调用测试
 
-先启动邮件服务（8081），再启动聊天服务（8082）：
+先启动 Nacos（见上文），再启动邮件服务（8081），最后启动聊天服务（8082）：
 
 ```bash
 ./mvnw -pl taoqi-agent-integration/taoqi-agent-integration-server spring-boot:run
@@ -323,11 +387,11 @@ curl "http://localhost:8082/api/chat/email/test?to=someone@example.com"
 }
 ```
 
-邮件是异步发送的，最终结果要到邮件服务的 `/api/email/records/{id}` 查询。
+邮件是异步发送的，最终结果要到邮件服务的 `/api/integration/email/records/{id}` 查询。
 
 ### 邮箱验证码
 
-`POST /api/chat/verification-code` 生成 6 位验证码，写入本地缓存（5 分钟过期），并通过 HTML 模板发送验证码邮件。模板在 `EmailTemplateConstants`，风格参考 ChatGPT 的验证邮件；占位符使用 `{{code}}`、`{{expireMinutes}}`，避免和 CSS 中的百分号冲突。
+`POST /api/chat/verification-code` 生成 6 位验证码，写入 Redis（5 分钟过期），并通过 HTML 模板发送验证码邮件。模板在 `EmailTemplateConstants`，风格参考 ChatGPT 的验证邮件；占位符使用 `{{code}}`、`{{expireMinutes}}`，避免和 CSS 中的百分号冲突。
 
 ```bash
 curl -X POST http://localhost:8082/api/chat/verification-code \
@@ -341,12 +405,27 @@ curl -X POST http://localhost:8082/api/chat/verification-code \
 {"code":200,"message":"success","data":{"recordId":3,"status":"SENDING","message":"邮件已提交，正在发送"},"success":true}
 ```
 
+校验验证码：
+
+```bash
+curl -X POST http://localhost:8082/api/chat/verification-code/verify \
+  -H "Content-Type: application/json" \
+  -d '{"email":"someone@example.com","code":"123456"}'
+```
+
+校验成功返回 `{"code":200,"message":"success","data":null,"success":true}`；验证码错误或已过期返回业务码 400：
+
+```json
+{"code":400,"message":"验证码错误或已过期","data":null,"success":false}
+```
+
 说明：
 
-- 接口复用 common 的 `@RateLimit`，每个来源每分钟最多 3 次；邮箱为空或格式错误返回 400；
-- 验证码保存在 `VerificationCodeCache`，基于 Caffeine 实现（`expireAfterWrite` 5 分钟、最大 10000 条），同一邮箱重新发送会覆盖旧码，`verify` 成功一次后立即失效；
-- 本地缓存只适用于单实例部署，多实例需要换成 Redis 等集中式缓存；
-- 目前只提供发送接口，校验能力在 `VerificationCodeCache#verify`，需要时可再暴露校验接口。
+- 发送接口每个来源每分钟最多调用 3 次，校验接口每分钟最多尝试 5 次；邮箱为空或格式错误、验证码不是 6 位数字时返回 400；
+- 验证码保存在 `VerificationCodeStore`，默认 Redis 实现：key 为 `taoqi:chat:verification-code:{小写邮箱}`，TTL 5 分钟；校验用 Lua 脚本原子比较并删除，只有校验成功才失效，输错验证码不会让正确验证码被消费；同一邮箱重新发送会覆盖旧码；
+- 单实例或测试环境可通过 `taoqi.chat.verification-code.store-type=memory` 切到 Caffeine 内存实现（环境变量 `VERIFICATION_CODE_STORE_TYPE`）；
+- Redis 不可用时发码接口直接失败（fail-closed），不会发出一封无法校验的邮件；
+- 校验失败的 HTTP 状态码仍是 200，业务结果看 `R.code`；参数格式错误由全局异常处理返回 HTTP 400。
 
 ## 自定义 Starter：taoqi-agent-starter
 
@@ -536,3 +615,9 @@ R<Void> failed = R.fail("参数错误");
 - 新增依赖时，版本属性（如 `<xxx.version>`）和 BOM / 依赖条目写在父模块。
 - 服务类模块的拆分方式：与 `taoqi-agent-common` 平级的聚合模块（如 `taoqi-agent-integration`）下再建 `-api`（接口契约、Feign 客户端、DTO）和 `-server`（服务实现）两个子模块，其它服务只需引入 `-api` 模块。
 - 源码与构建统一使用 UTF-8 编码。
+
+## 后续待办
+
+- [ ] **接入 Spring Cloud Gateway**（模块名 `taoqi-agent-gateway`）：新增网关服务，按 `/api/chat/**` → `lb://taoqi-agent-chat`、`/api/integration/**` → `lb://taoqi-agent-integration` 配置路由，由 Nacos 服务发现 + LoadBalancer 自动选择实例。
+  - 接入后 nginx 不再维护静态 upstream 列表，只保留静态资源与 TLS 终止；服务扩缩容不需要修改 nginx 配置。
+  - 网关自身需要注册到 Nacos，并引入 `spring-cloud-starter-gateway`、`spring-cloud-starter-alibaba-nacos-discovery`、`spring-cloud-starter-loadbalancer`。

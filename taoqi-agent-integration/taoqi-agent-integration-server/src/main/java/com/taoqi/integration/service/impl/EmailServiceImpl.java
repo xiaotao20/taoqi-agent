@@ -38,7 +38,7 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     public EmailSubmitResult submit(EmailSendRequest request) {
-        if (!StringUtils.hasText(mailProperties.from())) {
+        if (!StringUtils.hasText(mailProperties.getFrom())) {
             Long failedRecordId = emailRecordService.create(request, EmailSendStatus.FAILED, MISSING_FROM_MESSAGE);
             return EmailSubmitResult.rejected(failedRecordId, MISSING_FROM_MESSAGE);
         }

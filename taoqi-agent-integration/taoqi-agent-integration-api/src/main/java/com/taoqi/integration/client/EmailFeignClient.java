@@ -10,9 +10,12 @@ import org.springframework.cloud.openfeign.FeignClient;
  * {@code @EnableFeignClients(basePackages = "com.taoqi")}，即可注入 {@code EmailFeignClient}
  * 调用邮件服务；各服务的客户端统一放在 {@code com.taoqi.<domain>.client} 包下，扫描根包即可全部覆盖。
  *
+ * <p>{@code name} 与邮件服务的 {@code spring.application.name} 一致，运行期由 Nacos 解析实例地址，
+ * 再通过 Spring Cloud LoadBalancer 选择具体实例，因此不再配置固定 URL。
+ *
  * @author xiaotao
  * @date 2026-11-03
  */
-@FeignClient(name = "taoqi-agent-integration", url = "${taoqi.integration.base-url:http://localhost:8081}")
+@FeignClient(name = "taoqi-agent-integration")
 public interface EmailFeignClient extends EmailApi {
 }

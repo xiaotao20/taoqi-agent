@@ -53,7 +53,7 @@ class EmailServiceImplTest {
     @Test
     @DisplayName("配置齐全时先落一条发送中的记录，再发布发送事件")
     void submitsRecordAndPublishesEvent() {
-        when(mailProperties.from()).thenReturn("sender@qq.com");
+        when(mailProperties.getFrom()).thenReturn("sender@qq.com");
         when(emailRecordService.create(any(), eq(EmailSendStatus.SENDING), isNull())).thenReturn(100L);
 
         EmailSubmitResult result = emailService.submit(request);

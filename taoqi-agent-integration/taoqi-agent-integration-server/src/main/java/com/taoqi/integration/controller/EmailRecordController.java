@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @date 2026-11-03
  */
 @RestController
-@RequestMapping("/api/email/records")
+@RequestMapping("/api/integration/email/records")
 public class EmailRecordController {
 
     @Resource

@@ -38,7 +38,7 @@ public class EmailClientFacadeImpl implements EmailClientFacade {
 
     @Override
     public EmailSubmitResult sendTestEmail(String to) {
-        String receiver = StringUtils.hasText(to) ? to : chatProperties.testEmailTo();
+        String receiver = StringUtils.hasText(to) ? to : chatProperties.getTestEmailTo();
         EmailSendRequest request = new EmailSendRequest(
                 List.of(receiver),
                 null,

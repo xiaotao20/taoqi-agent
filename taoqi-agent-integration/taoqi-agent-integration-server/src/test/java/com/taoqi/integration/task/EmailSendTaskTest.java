@@ -53,8 +53,8 @@ class EmailSendTaskTest {
 
     @BeforeEach
     void setUp() {
-        when(mailProperties.from()).thenReturn("sender@qq.com");
-        when(mailProperties.personal()).thenReturn("陶气助手");
+        when(mailProperties.getFrom()).thenReturn("sender@qq.com");
+        when(mailProperties.getPersonal()).thenReturn("陶气助手");
         when(mailSender.createMimeMessage())
                 .thenAnswer(invocation -> new MimeMessage(Session.getInstance(new Properties())));
     }

@@ -40,7 +40,7 @@ class EmailClientFacadeImplTest {
     @Test
     @DisplayName("未传 to 时使用配置的默认收件人")
     void usesConfiguredRecipientWhenToMissing() {
-        when(chatProperties.testEmailTo()).thenReturn("default@qq.com");
+        when(chatProperties.getTestEmailTo()).thenReturn("default@qq.com");
         when(emailFeignClient.send(any())).thenReturn(R.data(EmailSubmitResult.accepted(1L)));
 
         EmailSubmitResult result = emailClientFacade.sendTestEmail(null);

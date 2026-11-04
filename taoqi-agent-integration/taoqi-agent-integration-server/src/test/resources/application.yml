@@ -2,6 +2,16 @@ server:
   port: 0
 
 spring:
+  cloud:
+    nacos:
+      discovery:
+        # 测试不连接 Nacos，避免依赖本地注册中心
+        enabled: false
+      config:
+        # 测试不加载远端配置
+        enabled: false
+        import-check:
+          enabled: false
   mail:
     # 测试不会真正连 SMTP，仅用于装配 JavaMailSender Bean
     host: localhost
