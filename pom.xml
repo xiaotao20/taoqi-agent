@@ -13,7 +13,7 @@
         <module>taoqi-agent-common</module>
         <module>taoqi-agent-integration</module>
         <module>taoqi-agent-chat</module>
-        <module>taoqi-agent-starter</module>
+        <module>taoqi-agent-log-starter</module>
     </modules>
 
     <properties>
@@ -31,7 +31,7 @@
         <taoqi-agent-common.version>1.0-SNAPSHOT</taoqi-agent-common.version>
         <taoqi-agent-integration.version>1.0-SNAPSHOT</taoqi-agent-integration.version>
         <taoqi-agent-chat.version>1.0-SNAPSHOT</taoqi-agent-chat.version>
-        <taoqi-agent-starter.version>1.0-SNAPSHOT</taoqi-agent-starter.version>
+        <taoqi-agent-log-starter.version>1.0-SNAPSHOT</taoqi-agent-log-starter.version>
     </properties>
 
     <dependencyManagement>
@@ -102,8 +102,8 @@
             </dependency>
             <dependency>
                 <groupId>com.taoqi</groupId>
-                <artifactId>taoqi-agent-starter</artifactId>
-                <version>${taoqi-agent-starter.version}</version>
+                <artifactId>taoqi-agent-log-starter</artifactId>
+                <version>${taoqi-agent-log-starter.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

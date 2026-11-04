@@ -12,7 +12,7 @@ Maven 多模块 Spring Boot 项目，Java 21，Spring Boot 4.1.2，Spring Cloud 
 | `taoqi-agent-common` | 公共能力：`@RateLimit` 限流注解、`R` 统一返回结果、通用工具类 |
 | `taoqi-agent-integration` | 第三方服务接入（聚合模块），下分 `-api` 与 `-server` |
 | `taoqi-agent-chat` | 聊天服务（聚合模块），下分 `-api` 与 `-server`；含验证码与 AI 异步任务（RocketMQ） |
-| `taoqi-agent-starter` | 自定义 Spring Boot Starter：请求 traceId 与访问日志 |
+| `taoqi-agent-log-starter` | 自定义 Spring Boot Starter：请求 traceId 与访问日志 |
 
 常用命令：
 

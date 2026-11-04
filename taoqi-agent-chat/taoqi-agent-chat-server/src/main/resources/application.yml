@@ -50,7 +50,7 @@ mybatis-plus:
 
 logging:
   pattern:
-    # 在日志中打印 taoqi-agent-starter 写入 MDC 的 traceId，未生成时显示 -
+    # 在日志中打印 taoqi-agent-log-starter 写入 MDC 的 traceId，未生成时显示 -
     console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
 
 rocketmq:

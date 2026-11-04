@@ -21,8 +21,8 @@
     <file url="file://$PROJECT_DIR$/taoqi-agent-integration/taoqi-agent-integration-api/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/taoqi-agent-integration/taoqi-agent-integration-server/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/taoqi-agent-integration/taoqi-agent-integration-server/src/main/resources" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/taoqi-agent-starter/src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/taoqi-agent-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-log-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/taoqi-agent-log-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/taoqi-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/taoqi-starter/src/main/resources" charset="UTF-8" />
   </component>

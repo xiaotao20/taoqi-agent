@@ -40,7 +40,7 @@ taoqi-agent 采用 Maven 多模块结构，以 Spring Boot 为基础框架，核
 | `taoqi-agent-chat` | 聊天模块聚合模块（pom），下分接口契约与服务实现 |
 | └ `taoqi-agent-chat-api` | 接口契约：AI 任务 DTO、实体与状态枚举 |
 | └ `taoqi-agent-chat-server` | 服务实现：通过 Nacos + Feign 调用邮件服务，提供验证码与 AI 任务队列（RocketMQ），默认端口 8082 |
-| `taoqi-agent-starter` | 自定义 Spring Boot Starter：引入即自动为 Servlet 应用加上 traceId 与访问日志 |
+| `taoqi-agent-log-starter` | 自定义 Spring Boot Starter：引入即自动为 Servlet 应用加上 traceId 与访问日志 |
 
 > 后续将随 Agent 能力演进新增模块（如 Agent 核心运行时、模型接入、工具调用、记忆管理等），新增模块的依赖版本仍由父模块统一管理。
 
@@ -116,7 +116,7 @@ taoqi-agent
             │   ├── application.yml
             │   └── db/schema.sql   # chat 库建表脚本
             └── test/java/com/taoqi/chat
-└── taoqi-agent-starter         # 自定义 Starter（自动配置）
+└── taoqi-agent-log-starter         # 自定义 Starter（自动配置）
     └── src
         ├── main/java/com/taoqi/starter/accesslog
         │   ├── AccessLogProperties.java            # 配置属性
@@ -366,7 +366,7 @@ curl "http://localhost:8081/api/integration/email/records/top-recipients?limit=5
 
 Facade 按被调用的服务命名（邮件服务对应 `EmailClientFacade`），职责是拆包 client 返回的 `R`，向上只暴露业务数据；controller 再统一用 `R` 包装响应。
 
-聊天服务同时引入了 `taoqi-agent-starter`，请求会自动带上 traceId 并打印访问日志；并使用了 common 模块的 `@RateLimit` 注解限制接口调用频率。此外提供一个连通性接口 `GET /api/chat/ping`（每来源 30 秒内最多 2 次），便于验证限流。详见后文。
+聊天服务同时引入了 `taoqi-agent-log-starter`，请求会自动带上 traceId 并打印访问日志；并使用了 common 模块的 `@RateLimit` 注解限制接口调用频率。此外提供一个连通性接口 `GET /api/chat/ping`（每来源 30 秒内最多 2 次），便于验证限流。详见后文。
 
 ### Feign 调用测试
 
@@ -522,9 +522,9 @@ docker compose -f docker/rocketmq/docker-compose.yml up -d
 本地没有 RocketMQ 时，可以用 `dispatch-mode=local` 启动，任务改由本机线程池执行，
 行为与 MQ 模式一致，只是消息不落盘、进程重启会丢失在途任务；单元测试默认使用该模式。
 
-## 自定义 Starter：taoqi-agent-starter
+## 自定义 Starter：taoqi-agent-log-starter
 
-`taoqi-agent-starter` 演示 Spring Boot Starter 的完整实现方式：使用方只需引入依赖，不写任何 `@EnableXxx` 注解、不做额外配置，功能就自动生效。
+`taoqi-agent-log-starter` 演示 Spring Boot Starter 的完整实现方式：使用方只需引入依赖，不写任何 `@EnableXxx` 注解、不做额外配置，功能就自动生效。
 
 ### 功能
 
@@ -569,7 +569,7 @@ docker compose -f docker/rocketmq/docker-compose.yml up -d
 ```xml
 <dependency>
     <groupId>com.taoqi</groupId>
-    <artifactId>taoqi-agent-starter</artifactId>
+    <artifactId>taoqi-agent-log-starter</artifactId>
 </dependency>
 ```
 
@@ -704,7 +704,7 @@ R<Void> failed = R.fail("参数错误");
 
 ## 开发约定
 
-- **各服务独立版本号**：根目录下每个服务模块在自身 `pom.xml` 中声明自己的 `<version>`，根 `pom.xml` 中用同名独立属性（`taoqi-agent-common.version`、`taoqi-agent-integration.version`、`taoqi-agent-chat.version`、`taoqi-agent-starter.version`）供 `dependencyManagement` 引用。升级某个服务时只改它自己的版本号，不影响其它服务；服务下的 `-api` / `-server` 跟随所属服务的版本。
+- **各服务独立版本号**：根目录下每个服务模块在自身 `pom.xml` 中声明自己的 `<version>`，根 `pom.xml` 中用同名独立属性（`taoqi-agent-common.version`、`taoqi-agent-integration.version`、`taoqi-agent-chat.version`、`taoqi-agent-log-starter.version`）供 `dependencyManagement` 引用。升级某个服务时只改它自己的版本号，不影响其它服务；服务下的 `-api` / `-server` 跟随所属服务的版本。
 - 升级带子模块的服务（如 `taoqi-agent-integration`）时，需同步修改：服务自身 `<version>`、其子模块 `parent` 中的 `<version>`、根 pom 中对应的版本属性。
 - 第三方依赖版本统一在父模块 `pom.xml` 的 `dependencyManagement` 中管理，子模块引用依赖时不写 `<version>`；内部服务之间的依赖也由父模块按各自版本属性统一管理。
 - 新增依赖时，版本属性（如 `<xxx.version>`）和 BOM / 依赖条目写在父模块。
